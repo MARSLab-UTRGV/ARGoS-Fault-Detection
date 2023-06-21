@@ -24,6 +24,12 @@ void CPFA_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
 		
 	}
 
+	argos::CColor customRed(255, 64, 64, 255);
+
+	if(c.HasFault()) {
+		DrawCylinder(CVector3(0.0, 0.0, 0.001), CQuaternion(), loopFunctions.FaultHighlightRadius, 0.008, customRed);
+	}
+
 	if(loopFunctions.DrawIDs == 1) {
 		/* Disable lighting, so it does not interfere with the chosen text color */
 		glDisable(GL_LIGHTING);
@@ -101,6 +107,10 @@ void CPFA_qt_user_functions::DrawQuarantineZone() {			// Ryan Luna 1/24/23
 		DrawCylinder(nest_3d, CQuaternion(), zonelist[i].GetRadius(), 0.008, zonelist[i].GetColor());
 	}
 	zonelist.clear();
+}
+
+void CPFA_qt_user_functions::DrawFaultHighlight() {
+	
 }
 
 void CPFA_qt_user_functions::DrawFood() {

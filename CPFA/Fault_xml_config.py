@@ -89,6 +89,13 @@ class C_XML_CONFIG:
         self.RCL_Y =             8                       # Real cluster width Y for cluster distribution
         self.NUM_PLAW_RF =       192                     # Number of real food to distribute for power law distribution
 
+        # Fault Injection Loop Function Settings
+        self.F_NUM =             0                       # Fault Injection Mode (0=None)
+        self.F_OFD =             0                       # Bias/Offset Distance
+        self.F_COUNT =           0                       # Number of bots to inject
+        self.F_TIME =            0                       # Injection time
+        self.F_HL_RAD =          0.25                    # Faulty bot highlight radius
+
         # Other Loop Function Settings
         self.DRAW_ID =           1                       # Draw bot IDs
         self.DRAW_TARGET_RAYS =  0                       # Draw directional rays to target (for each bot)
@@ -97,7 +104,7 @@ class C_XML_CONFIG:
         self.MAX_SIM_COUNT =     1                       # Max simulation counter
         self.MAX_SIM_TIME =      1800                    # Max simulation time in seconds
         self.OUTPUT_DATA =       0                       # turn output data on/off
-        self.NEST_ELV =          0.001                   # Nest elevation
+        self.NEST_ELV =          0.0                     # Nest elevation
         self.NEST_POS =          (0,0)                   # Nest location
         self.NEST_RAD =          0.25                    # Nest radius
         self.VFP =               0                       # Variable food placement
@@ -221,100 +228,42 @@ class C_XML_CONFIG:
 
         dist = ''
         num_real_food = 0
-        num_fake_food = 0
-        dense = ''
         
-        if self.RFD == 0 and self.FFD == 0:
-            dist = 'R-rand_F-rand'
+        if self.RFD == 0:
+            dist = 'rd'
             num_real_food = self.NUM_RF
-            num_fake_food = self.NUM_FF
-
-        elif self.RFD == 0 and self.FFD == 1:
-            dist = 'R-rand_F-cl'
-            num_real_food = self.NUM_RF
-            num_fake_food = self.FCL_X * self.FCL_Y * self.NUM_FCL
         
-        elif self.RFD == 0 and self.FFD == 2:
-            dist = 'R-rand_F-pl'
-            num_real_food = self.NUM_RF
-            num_fake_food = self.NUM_PLAW_FF
-        
-        elif self.RFD == 1 and self.FFD == 0:
-            dist = 'R-cl_F-rand'
+        elif self.RFD == 1:
+            dist = 'cl'
             num_real_food = self.RCL_X * self.RCL_Y * self.NUM_RCL
-            num_fake_food = self.NUM_FF
-        
-        elif self.RFD == 1 and self.FFD == 1:
-            dist = 'R-cl_F-cl'
-            num_real_food = self.RCL_X * self.RCL_Y * self.NUM_RCL
-            num_fake_food = self.FCL_X * self.FCL_Y * self.NUM_FCL
-        
-        elif self.RFD == 1 and self.FFD == 2:
-            dist = 'R-cl_F-pl'
-            num_real_food = self.RCL_X * self.RCL_Y * self.NUM_RCL
-            num_fake_food = self.NUM_PLAW_FF
        
         elif self.RFD == 2 and self.FFD == 0:
-            dist = 'R-pl_F-rand'
+            dist = 'pl'
             num_real_food = self.NUM_PLAW_RF
-            num_fake_food = self.NUM_FF
-        
-        elif self.RFD == 2 and self.FFD == 1:
-            dist = 'R-pl_F-cl'
-            num_real_food = self.NUM_PLAW_RF
-            num_fake_food = self.FCL_X * self.FCL_Y * self.NUM_FCL
-        
-        elif self.RFD == 2 and self.FFD == 2:
-            dist = 'R-pl_F-pl'
-            num_real_food = self.NUM_PLAW_RF
-            num_fake_food = self.NUM_PLAW_FF
 
         else:
             raise Exception("ERROR: Invalid distribution method used.\n")
 
-        if (self.USE_FF_ONLY == 'true'):
-            if self.DENSIFY == "true":
-                dense = 'density-high'
-            else:
-                dense = 'density-std'
+        path = self.RD_PATH
+        alg  = f'CPFA'
+        bot_count = f'r{self.BOT_COUNT}'
+        rfc = f'rfc{num_real_food}'
+        arena = f'{self.ARENA_SIZE[0]}by{self.ARENA_SIZE[1]}'
+        time = f'time{self.MAX_SIM_TIME}'
+        iter = f'iter{self.num_iterations}'
 
-            path = self.RD_PATH
-            alg = f'CPFA'
-            bot_count = f'r{self.BOT_COUNT}'
-            rfc = f'rfc0'
-            ffc = f'ffc{num_fake_food}'
-            arena = f'{self.ARENA_SIZE[0]}by{self.ARENA_SIZE[1]}'
-            time = f'time{self.MAX_SIM_TIME}'
-            iter = f'iter{self.num_iterations}'
-
-            self.fname_header = f'{path}{alg}_{dense}_{dist}_{bot_count}_{rfc}_{ffc}_{arena}_{time}_{iter}_'
+        if self.F_NUM == 0:
+            fcode = 'FT-none'
+        elif self.F_NUM == 1:
+            fcode = f'FT-cbias_ofd{self.F_OFD}'
         else:
-            path = self.RD_PATH
-            alg = f'CPFA'
-            bot_count = f'r{self.BOT_COUNT}'
-            rfc = f'rfc{num_real_food}'
-            ffc = f'ffc{num_fake_food}'
-            arena = f'{self.ARENA_SIZE[0]}by{self.ARENA_SIZE[1]}'
-            time = f'time{self.MAX_SIM_TIME}'
-            iter = f'iter{self.num_iterations}'
-
-            if self.USE_FF_DOS == "false" and self.UQZ == "false":
-                st = 'st-0'
-                ffc = 'ffc0'
-            elif self.USE_FF_DOS == "true" and self.UQZ == "false":
-                st = 'st-1'
-            elif self.USE_FF_DOS == "true" and self.UQZ == "true":
-                if self.MM == 1:
-                    st = 'st-2'
-                else:
-                    st = 'st-3'
-
-            self.fname_header = f'{path}{alg}_{st}_{dist}_{bot_count}_{rfc}_{ffc}_{arena}_{time}_{iter}_'
-            # self.fname_header = f'{path}{alg}_{dist}_{bot_count}_{rfc}_{ffc}_{arena}_{time}_{iter}_'
-
-    
-        self.fname_header = self.fname_header + f'ffacc{int(self.FF_ACC*100)}_'
+            raise Exception("ERROR: Fault type not recognized...\n")
         
+        fct = f'fct{self.F_COUNT}'
+        ftm = f'ftm{self.F_TIME}'
+        
+        self.fname_header = f'{path}{alg}_{dist}_{bot_count}_{rfc}_{fcode}_{fct}_{ftm}_{arena}_{time}_{iter}'
+
         return self.fname_header
 
     def setBotCount(self,botCount):
@@ -473,6 +422,11 @@ class C_XML_CONFIG:
         lf_settings.setAttribute('FakeClusterWidthY', str(self.FCL_Y))
         lf_settings.setAttribute('FilenameHeader', str(self.fname_header))
         lf_settings.setAttribute('Densify', str(self.DENSIFY))
+        lf_settings.setAttribute('FaultNumber', str(self.F_NUM))
+        lf_settings.setAttribute('OffsetDistance', str(self.F_OFD))
+        lf_settings.setAttribute('NumBotsToInject', str(self.F_COUNT))
+        lf_settings.setAttribute('InjectionTime', str(self.F_TIME))
+        lf_settings.setAttribute('FaultHighlightRadius', str(self.F_HL_RAD))
         loops.appendChild(lf_settings)
         #       </settings>
         #   </loop_functions>
@@ -758,7 +712,7 @@ class C_XML_CONFIG:
 
         xml_str = xml.toprettyxml(indent = "\t")
 
-        xml_filename = "./experiments/CPFA_DoS_Simulation.xml"
+        xml_filename = "./experiments/CPFA_Fault_Simulation.xml"
 
         with open(xml_filename, "w") as f:
             f.write(xml_str)

@@ -32,7 +32,7 @@ class CPFA_controller : public BaseController {
 		bool IsHoldingFood();
 		bool IsHoldingFakeFood();	// Ryan Luna 11/12/22
 		bool IsUsingSiteFidelity();
-		bool IsInTheNest();
+		bool ThinksIsInTheNest();
 
 		Real FoodDistanceTolerance;
 
@@ -44,6 +44,7 @@ class CPFA_controller : public BaseController {
 		size_t      startTime;//qilu 09/26/2016
 
 		/* quarantine zone functions */		// Ryan Luna 12/28/22
+
 		void ClearZoneList();
 		void ClearLocalFoodList();
 		void AddZone(QZone newZone);
@@ -51,6 +52,12 @@ class CPFA_controller : public BaseController {
 		void RemoveZone(QZone Z);
 		void RemoveLocalFood(Food F);
 		bool TargetInQZone(CVector2 target);
+
+		/* fault injection */
+
+		void InjectFault(size_t faultCode);
+		bool HasFault();
+		bool ActuallyIsInTheNest();
 
 	private:
 
@@ -134,6 +141,8 @@ class CPFA_controller : public BaseController {
 		string results_path;
 		string results_full_path;
 		bool isUsingPheromone;
+
+		bool faultInjected;
 
 		unsigned int survey_count;
 		/* Pointer to the LEDs actuator */

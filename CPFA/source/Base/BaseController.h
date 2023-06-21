@@ -43,6 +43,20 @@ class BaseController : public argos::CCI_Controller {
 
 		void SetIsHeadingToNest(bool n);
 		bool IsAtTarget();
+		void SetControllerID(std::string id);
+
+		/**
+		 * Get the true(exact) position of the robot regardles of any localization faults.
+		 * For use in functions that simulate sensing/monitoring of the robot's local environment.
+		*/
+		argos::CVector2 GetRealPosition();
+
+
+		/******************************************************/
+
+		
+
+		/******************************************************/
 
 	protected:
 
@@ -84,6 +98,50 @@ class BaseController : public argos::CCI_Controller {
 			FORWARD = 3,
 			BACK    = 4
 		} CurrentMovementState;
+	
+
+
+		/******************************************************/
+
+		// fault type variables
+		enum FaultType {
+			NONE		= 0,	// No Fault
+			C_BIAS 		= 1,	// Consistent Bias/Offset
+			P_BIAS 		= 2,	// Periodical Bias/Offset
+			FREEZE 		= 3,	// GPS "Freeze"
+			T_LOSS		= 4,	// Temporary Signal Loss/Interference
+			DRIFT		= 5		// Drift Error
+		} CurrentFaultType;
+
+		bool hasFault;
+
+		/**
+		 * Injects a fault into the BaseController.
+		 * @param faultCode (Required):
+		 * 		'NONE' 		= No fault,
+		 * 		'C_BIAS' 	= Consistent Bias/Offset,
+		 * 		'P_BIAS'	= Periodic Bias/Offset,
+		 * 		'FREEZE'	= GPS "Freeze",
+		 * 		'T_LOSS'	= Temporary Signal Loss/Interference,
+		 * 		'DRIFT'		= Drift Error (over time)
+		 * @param desiredOffsetDistance (default = 0)
+		 * @param desiredBiasFrequency (default = 0)
+		 * @param desiredFrozenCoordinate (default = CVector2(0,0))
+		 * @param desiredSignalLossDuration (default = 0)
+		 * @param desiredDriftRatePerSecond (default = 0)
+		*/
+		void SetFault(	FaultType faultCode, 
+						argos::Real desiredOffsetDistance = 0,
+						argos::Real desiredBiasFrequency = 0,
+						argos::CVector2 desiredFrozenCoordinate = argos::CVector2(0,0),
+						argos::Real desiredSignalLossDuration = 0,
+						argos::Real desiredDriftRatePerSecond = 0);
+		
+		void ClearFault();
+
+		/******************************************************/
+
+
 
 		/* movement definition variables */
 		struct Movement {
@@ -113,6 +171,29 @@ class BaseController : public argos::CCI_Controller {
 		void SetMoveBack(argos::Real newTargetDistance);
 		void PushMovement(size_t moveType, argos::Real moveSize);
 		void PopMovement();
+
+		/******************************************************/
+
+		argos::CVector2 ConsistentBias();
+		// void PeriodicBias();
+		// void GPSFreeze();
+		// void TemporarySignalLoss();
+		// void DriftError();
+
+		argos::CVector2 GenerateOffset();
+		bool cbiasSet;
+		argos::CVector2 cbiasOffset;
+
+
+		argos::Real offsetDistance;
+		argos::Real biasFrequency;
+		argos::CVector2 frozenCoordinate;
+		argos::Real signalLossDuration;
+		argos::Real driftRatePerSecond;
+
+		/******************************************************/
+		
+		std::string controllerID;
 
 		/* collision detection functions */
 		bool CollisionDetection();

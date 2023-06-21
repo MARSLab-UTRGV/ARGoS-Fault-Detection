@@ -21,8 +21,6 @@ The constructor will try to initialize to zero, but only if the type is right.
 We don't do any over-allocation, so resizing can be expensive.
 No error checking on the copy, so don't walk over end of array!
 
-TODO:
-  should do specialization for simple types that does memcpy rather than loop
 ---------------------------------------------------------------------------- */
 #ifndef _ga_arraytmpl_h_
 #define _ga_arraytmpl_h_

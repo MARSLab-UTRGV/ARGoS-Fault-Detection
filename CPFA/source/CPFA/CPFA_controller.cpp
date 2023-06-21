@@ -24,7 +24,8 @@ CPFA_controller::CPFA_controller() :
 	UseQZones(false),
 	MergeMode(0),
 	FFdetectionAcc(0.0),
-	RFdetectionAcc(0.0)
+	RFdetectionAcc(0.0),
+	faultInjected(false)
 {
 }
 
@@ -63,6 +64,7 @@ void CPFA_controller::Init(argos::TConfigurationNode &node) {
 	*/
 	SetTarget(p);
     controllerID= GetId();
+	// SetControllerID(controllerID);
     m_pcLEDs   = GetActuator<CCI_LEDsActuator>("leds");
     controllerID= GetId();//qilu 07/26/2016
 	m_pcLEDs->SetAllColors(CColor::GREEN);
@@ -114,18 +116,46 @@ void CPFA_controller::ControlStep() {
 
 	// Add line so we can draw the trail
 
-	CVector3 position3d(GetPosition().GetX(), GetPosition().GetY(), 0.00);
+	/**
+	 * MODIFIED: Use the true position of the robot to draw trail, not the robot's estimated position (potenetially faulty)
+	*/
+
+	CVector3 position3d(GetRealPosition().GetX(), GetRealPosition().GetY(), 0.00);
 	CVector3 target3d(previous_position.GetX(), previous_position.GetY(), 0.00);
 	CRay3 targetRay(target3d, position3d);
 	myTrail.push_back(targetRay);
 	LoopFunctions->TargetRayList.push_back(targetRay);
 	LoopFunctions->TargetRayColorList.push_back(TrailColor);
 
-	previous_position = GetPosition();
+	previous_position = GetRealPosition();
 
 	//UpdateTargetRayList();
 	CPFA();
 	Move();
+}
+
+void CPFA_controller::InjectFault(size_t faultCode){
+	faultInjected = true;
+	FaultType FT = NONE;
+	string ft = "NONE";
+	switch (faultCode){
+		case 0: FT = NONE; ft = "NONE"; break;
+		case 1: FT = C_BIAS; ft = "C_BIAS"; break;
+		case 2: FT = P_BIAS; ft = "P_BIAS"; break;
+		case 3: FT = FREEZE; ft = "FREEZE"; break;
+		case 4: FT = T_LOSS; ft = "T_LOSS"; break;
+		case 5: FT = DRIFT; ft = "DRIFT"; break;
+		default: {
+            throw std::runtime_error("Invalid fault type...\nCurrently Available Fault Types: Consistent Bias/Offset (C_BIAS)");
+			break;
+        }
+	}
+	LOG << "Fault Type: " << ft << endl;
+	SetFault(FT, LoopFunctions->OffsetDistance);
+}
+
+bool CPFA_controller::HasFault(){
+	return faultInjected;
 }
 
 void CPFA_controller::Reset() {
@@ -207,12 +237,16 @@ void CPFA_controller::CPFA() {
 	}
 }
 
-bool CPFA_controller::IsInTheNest() {
+bool CPFA_controller::ThinksIsInTheNest() {
     
 	return ((GetPosition() - LoopFunctions->NestPosition).SquareLength()
 		< LoopFunctions->NestRadiusSquared);
 	}
 
+bool CPFA_controller::ActuallyIsInTheNest() {
+	return ((GetRealPosition() - LoopFunctions->NestPosition).SquareLength()
+		< LoopFunctions->NestRadiusSquared);
+}
 void CPFA_controller::SetLoopFunctions(CPFA_loop_functions* lf) {
 	LoopFunctions = lf;
 
@@ -535,139 +569,43 @@ void CPFA_controller::Returning() {
  //LOG<<"Returning..."<<endl;
 	//SetHoldingFood();
 
-	// Are we there yet? (To the nest, that is.)
-	if(IsInTheNest()) {
-		// Based on a Poisson CDF, the robot may or may not create a pheromone
-	    // located at the last place it picked up food.
-	    argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
-	    argos::Real poissonCDF_sFollowRate = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfSiteFidelity);
-	    argos::Real r1 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
-	    argos::Real r2 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+	/**
+	 * MODIFIED:
+	*/
+	if (IsAtTarget() && ActuallyIsInTheNest()) {
 
-		/**
-		 * Regardless of holding food or not, reset badfood params
-		 * 
-		 * Ryan Luna 01/31/23
-		*/
-		BadFoodCount = 0;
-		CurrentZone = NULL;
+		#pragma region _Deposit Resource
 
-	    if (isHoldingFood) { 
-          //drop off the food and display in the nest 
-			argos::CVector2 placementPosition;
-			placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
-          
-          	while((placementPosition-LoopFunctions->NestPosition).SquareLength()>pow(LoopFunctions->NestRadius/2.0-LoopFunctions->FoodRadius, 2))
-              	placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
+			// Based on a Poisson CDF, the robot may or may not create a pheromone
+			// located at the last place it picked up food.
+			argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
+			argos::Real poissonCDF_sFollowRate = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfSiteFidelity);
+			argos::Real r1 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+			argos::Real r2 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+			
+			/**
+			 * Regardless of holding food or not, reset badfood params
+			 * 
+			 * Ryan Luna 01/31/23
+			*/
+			BadFoodCount = 0;
+			CurrentZone = NULL;
 
-			// only count it if the food is real ** Ryan Luna 11/12/22
-			if (!isHoldingFakeFood){	// IF HOLDING REAL FOOD
+			if (isHoldingFood) { 
+			//drop off the food and display in the nest 
+				argos::CVector2 placementPosition;
+				placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
+			
+				while((placementPosition-LoopFunctions->NestPosition).SquareLength()>pow(LoopFunctions->NestRadius/2.0-LoopFunctions->FoodRadius, 2))
+					placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
 
-				num_targets_collected++;
-				LoopFunctions->currNumCollectedFood++;
-				LoopFunctions->RealFoodCollected++;
-				LoopFunctions->setScore(num_targets_collected);
-				// delete local food list		Ryan Luna 01/24/23
-				ClearLocalFoodList();
+				// only count it if the food is real ** Ryan Luna 11/12/22
+				if (!isHoldingFakeFood){	// IF HOLDING REAL FOOD
 
-				/**
-				 * Always lay the pheromone trail if the food is real
-				 * 
-				 * Ryan Luna 01/25/23
-				*/
-				if(poissonCDF_pLayRate > r1 && updateFidelity) {
-					LoopFunctions->numRealTrails++;
-					TrailToShare.push_back(SiteFidelityPosition);	// moved from SetLocalResourseDensity() Ryan Luna 02/05/23
-					TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
-					argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
-					Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
-					LoopFunctions->PheromoneList.push_back(sharedPheromone);
-					sharedPheromone.Deactivate(); // make sure this won't get re-added later...
-				}
-				TrailToShare.clear(); 
-				// the nest will detect real food with <RFdetectionAcc> accuracy.
-				Real random = RNG->Uniform(CRange<Real>(0.0, 1.0));
-
-
-
-
-				
-				if (random <= RFdetectionAcc) {	// passed real food detection probability
-					//argos::LOG << "Real Food Aquired" << endl;
-
-
-				} else {	// TREAT IT AS FAKE FOOD
-
-					//argos::LOG << "Fake Food Aquired" << endl;
-					// LoopFunctions->FakeFoodCollected++;
-
-					// if (!LocalFoodList.empty() && UseQZones){	// IF THE LOCAL FOOD LIST IS NOT EMPTY
-
-					// 	// give local food info to nest to create a quarantine zone		Ryan Luna 01/24/23
-					// 	LoopFunctions->MainNest.CreateZone(MergeMode, LoopFunctions->FoodList, LocalFoodList, FoodBeingHeld, LoopFunctions->SearchRadius);
-					// 	ClearLocalFoodList();
-					// 	// possible unsafe usage of FoodBeingHeld (unsure how to clean object memory without destroying it)		// Ryan Luna 01/25/23
-					// }
-					// if (!UseQZones){
-					// 	/**
-					// 	 * If we are NOT using QZones, lay a pheromone trail for fake food too
-					// 	 * 
-					// 	 * Ryan Luna 02/5/23
-					// 	*/
-					// 	if(poissonCDF_pLayRate > r1 && updateFidelity) {
-					// 		LoopFunctions->numRealTrails++;
-					// 		TrailToShare.push_back(SiteFidelityPosition);
-					// 		TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
-					// 		argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
-					// 		Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
-					// 		LoopFunctions->PheromoneList.push_back(sharedPheromone);
-					// 		sharedPheromone.Deactivate(); // make sure this won't get re-added later...
-					// 	}
-					// 	TrailToShare.clear(); 
-					// }
-
-				}
-			} else {	// IF HOLDING FAKE FOOD
-
-				LoopFunctions->FakeFoodCollected++;
-				// the nest will detect fake food with <FFdetectionAcc> accuracy.
-				Real random = RNG->Uniform(CRange<Real>(0.0, 1.0));
-				if (random <= FFdetectionAcc){	// Passed fake food detection probability
-					//argos::LOG << "Fake Food Aquired" << endl;
-
-					if (!LocalFoodList.empty() && UseQZones){	// IF THE LOCAL FOOD LIST IS NOT EMPTY
-
-						// give local food info to nest to create a quarantine zone		Ryan Luna 01/24/23
-						LoopFunctions->MainNest.CreateZone(MergeMode, LoopFunctions->FoodList, LocalFoodList, FoodBeingHeld, LoopFunctions->SearchRadius);
-						ClearLocalFoodList();
-						// possible unsafe usage of FoodBeingHeld (unsure how to clean object memory without destroying it)		// Ryan Luna 01/25/23
-					}
-					if (!UseQZones){
-						/**
-						 * If we are NOT using QZones, lay a pheromone trail for fake food too
-						 * 
-						 * Ryan Luna 02/5/23
-						*/
-						if(poissonCDF_pLayRate > r1 && updateFidelity) {
-							LoopFunctions->numFakeTrails++;
-							TrailToShare.push_back(SiteFidelityPosition);
-							TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
-							argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
-							Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
-							LoopFunctions->PheromoneList.push_back(sharedPheromone);
-							sharedPheromone.Deactivate(); // make sure this won't get re-added later...
-						}
-						TrailToShare.clear(); 
-					}
-				} else { // TREAT IT AS REAL FOOD
-					LOG << "False Positive Collected..." << endl;
-					LoopFunctions->numFalsePositives++;		// increment number of false positives on real food detected
-					//argos::LOG << "Real Food Aquired" << endl;
-					// num_targets_collected++;
-					// LoopFunctions->currNumCollectedFood++;
-					// LoopFunctions->RealFoodCollected++;
-					// LoopFunctions->setScore(num_targets_collected);
-
+					num_targets_collected++;
+					LoopFunctions->currNumCollectedFood++;
+					LoopFunctions->RealFoodCollected++;
+					LoopFunctions->setScore(num_targets_collected);
 					// delete local food list		Ryan Luna 01/24/23
 					ClearLocalFoodList();
 
@@ -677,7 +615,7 @@ void CPFA_controller::Returning() {
 					 * Ryan Luna 01/25/23
 					*/
 					if(poissonCDF_pLayRate > r1 && updateFidelity) {
-						LoopFunctions->numFakeTrails++;
+						LoopFunctions->numRealTrails++;
 						TrailToShare.push_back(SiteFidelityPosition);	// moved from SetLocalResourseDensity() Ryan Luna 02/05/23
 						TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
 						argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
@@ -686,79 +624,173 @@ void CPFA_controller::Returning() {
 						sharedPheromone.Deactivate(); // make sure this won't get re-added later...
 					}
 					TrailToShare.clear(); 
+					// the nest will detect real food with <RFdetectionAcc> accuracy.
+					Real random = RNG->Uniform(CRange<Real>(0.0, 1.0));
+					
+					if (random <= RFdetectionAcc) {	// passed real food detection probability
+						//argos::LOG << "Real Food Aquired" << endl;
+
+
+					} else {	// TREAT IT AS FAKE FOOD
+
+						//argos::LOG << "Fake Food Aquired" << endl;
+						// LoopFunctions->FakeFoodCollected++;
+
+						// if (!LocalFoodList.empty() && UseQZones){	// IF THE LOCAL FOOD LIST IS NOT EMPTY
+
+						// 	// give local food info to nest to create a quarantine zone		Ryan Luna 01/24/23
+						// 	LoopFunctions->MainNest.CreateZone(MergeMode, LoopFunctions->FoodList, LocalFoodList, FoodBeingHeld, LoopFunctions->SearchRadius);
+						// 	ClearLocalFoodList();
+						// 	// possible unsafe usage of FoodBeingHeld (unsure how to clean object memory without destroying it)		// Ryan Luna 01/25/23
+						// }
+						// if (!UseQZones){
+						// 	/**
+						// 	 * If we are NOT using QZones, lay a pheromone trail for fake food too
+						// 	 * 
+						// 	 * Ryan Luna 02/5/23
+						// 	*/
+						// 	if(poissonCDF_pLayRate > r1 && updateFidelity) {
+						// 		LoopFunctions->numRealTrails++;
+						// 		TrailToShare.push_back(SiteFidelityPosition);
+						// 		TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
+						// 		argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
+						// 		Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
+						// 		LoopFunctions->PheromoneList.push_back(sharedPheromone);
+						// 		sharedPheromone.Deactivate(); // make sure this won't get re-added later...
+						// 	}
+						// 	TrailToShare.clear(); 
+						// }
+
+					}
+				} else {	// IF HOLDING FAKE FOOD
+
+					LoopFunctions->FakeFoodCollected++;
+					// the nest will detect fake food with <FFdetectionAcc> accuracy.
+					Real random = RNG->Uniform(CRange<Real>(0.0, 1.0));
+					if (random <= FFdetectionAcc){	// Passed fake food detection probability
+						//argos::LOG << "Fake Food Aquired" << endl;
+
+						if (!LocalFoodList.empty() && UseQZones){	// IF THE LOCAL FOOD LIST IS NOT EMPTY
+
+							// give local food info to nest to create a quarantine zone		Ryan Luna 01/24/23
+							LoopFunctions->MainNest.CreateZone(MergeMode, LoopFunctions->FoodList, LocalFoodList, FoodBeingHeld, LoopFunctions->SearchRadius);
+							ClearLocalFoodList();
+							// possible unsafe usage of FoodBeingHeld (unsure how to clean object memory without destroying it)		// Ryan Luna 01/25/23
+						}
+						if (!UseQZones){
+							/**
+							 * If we are NOT using QZones, lay a pheromone trail for fake food too
+							 * 
+							 * Ryan Luna 02/5/23
+							*/
+							if(poissonCDF_pLayRate > r1 && updateFidelity) {
+								LoopFunctions->numFakeTrails++;
+								TrailToShare.push_back(SiteFidelityPosition);
+								TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
+								argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
+								Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
+								LoopFunctions->PheromoneList.push_back(sharedPheromone);
+								sharedPheromone.Deactivate(); // make sure this won't get re-added later...
+							}
+							TrailToShare.clear(); 
+						}
+					} else { // TREAT IT AS REAL FOOD
+						LOG << "False Positive Collected..." << endl;
+						LoopFunctions->numFalsePositives++;		// increment number of false positives on real food detected
+						//argos::LOG << "Real Food Aquired" << endl;
+						// num_targets_collected++;
+						// LoopFunctions->currNumCollectedFood++;
+						// LoopFunctions->RealFoodCollected++;
+						// LoopFunctions->setScore(num_targets_collected);
+
+						// delete local food list		Ryan Luna 01/24/23
+						ClearLocalFoodList();
+
+						/**
+						 * Always lay the pheromone trail if the food is real
+						 * 
+						 * Ryan Luna 01/25/23
+						*/
+						if(poissonCDF_pLayRate > r1 && updateFidelity) {
+							LoopFunctions->numFakeTrails++;
+							TrailToShare.push_back(SiteFidelityPosition);	// moved from SetLocalResourseDensity() Ryan Luna 02/05/23
+							TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
+							argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
+							Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity, isHoldingFakeFood);
+							LoopFunctions->PheromoneList.push_back(sharedPheromone);
+							sharedPheromone.Deactivate(); // make sure this won't get re-added later...
+						}
+						TrailToShare.clear(); 
+					}
 				}
 			}
-	    }
 
-		// Get Quarantine Zone info from nest		// Ryan Luna 01/24/23
-		if (!LoopFunctions->MainNest.GetZoneList().empty() && UseQZones){
-			ClearZoneList();
-			for(int i=0;i<LoopFunctions->MainNest.GetZoneList().size();i++){
-				AddZone(LoopFunctions->MainNest.GetZoneList()[i]);
+			// Get Quarantine Zone info from nest		// Ryan Luna 01/24/23
+			if (!LoopFunctions->MainNest.GetZoneList().empty() && UseQZones){
+				ClearZoneList();
+				for(int i=0;i<LoopFunctions->MainNest.GetZoneList().size();i++){
+					AddZone(LoopFunctions->MainNest.GetZoneList()[i]);
+				}
 			}
-		}
 
-		/**
-		 * Determine probabilistically whether to use site fidelity, pheromone
-	     * trails, or random search.
-		 * 
-		 * If pheromone trails are NOT created when fake food is collected, then we don't have to
-		 * worry about bots using trails to fake food.
-		 * 
-		 * Our concern is a bot using site fidelity after fake food is collected. So we must take
-		 * into account the 'isHoldingFakeFood' variable when deciding to use site fidelity. Only
-		 * when this boolean is false, we may use site fidelity.
-		 * 
-		 * Ryan Luna 01/25/23
-		*/
+			/**
+			 * Determine probabilistically whether to use site fidelity, pheromone
+			 * trails, or random search.
+			 * 
+			 * If pheromone trails are NOT created when fake food is collected, then we don't have to
+			 * worry about bots using trails to fake food.
+			 * 
+			 * Our concern is a bot using site fidelity after fake food is collected. So we must take
+			 * into account the 'isHoldingFakeFood' variable when deciding to use site fidelity. Only
+			 * when this boolean is false, we may use site fidelity.
+			 * 
+			 * Ryan Luna 01/25/23
+			*/
 
-	    // use site fidelity
-	    if(updateFidelity && poissonCDF_sFollowRate > r2 && !isHoldingFakeFood) {
+			// use site fidelity
+			if(updateFidelity && poissonCDF_sFollowRate > r2 && !isHoldingFakeFood) {
+				SetIsHeadingToNest(false);
+				SetTarget(SiteFidelityPosition);
+				isInformed = true;
+			}
+			// use pheromone waypoints
+			else if(SetTargetPheromone()) {
+				isInformed = true;
+				isUsingSiteFidelity = false;
+			}
+			// use random search
+			else {
+				SetRandomSearchLocation();
+				isInformed = false;
+				isUsingSiteFidelity = false;
+			}
+
+			isGivingUpSearch = false;
+			CPFA_state = DEPARTING;   
+			isHoldingFood = false;
+			isHoldingFakeFood = false;	// Ryan Luna 11/12/22 
+			travelingTime+=SimulationTick()-startTime;//qilu 10/22
+			startTime = SimulationTick();//qilu 10/22
+
+			#pragma endregion
+	
+	} else if (IsAtTarget()) {
+
+		#pragma region _Randomly Search For Nest
+
+			argos::Real USCV = LoopFunctions->UninformedSearchVariation.GetValue();
+			argos::Real rand = RNG->Gaussian(USCV);
+
+			argos::CRadians rotation(rand);
+			argos::CRadians angle1(rotation);
+			argos::CRadians angle2(GetHeading());
+			argos::CRadians turn_angle(angle1 + angle2);
+			argos::CVector2 turn_vector(SearchStepSize, turn_angle);
 			SetIsHeadingToNest(false);
-			SetTarget(SiteFidelityPosition);
-			isInformed = true;
-	    }
-		// use pheromone waypoints
-		else if(SetTargetPheromone()) {
-			isInformed = true;
-			isUsingSiteFidelity = false;
-		}
-       	// use random search
-      	else {
-            SetRandomSearchLocation();
-            isInformed = false;
-            isUsingSiteFidelity = false;
-      	}
+			SetTarget(turn_vector + GetPosition());
 
-	isGivingUpSearch = false;
-	CPFA_state = DEPARTING;   
-	isHoldingFood = false;
-	isHoldingFakeFood = false;	// Ryan Luna 11/12/22 
-	travelingTime+=SimulationTick()-startTime;//qilu 10/22
-	startTime = SimulationTick();//qilu 10/22
-                
-    }
-	// Take a small step towards the nest so we don't overshoot by too much is we miss it
-    else 
-    {
-        if(IsAtTarget())
-        {
-        //argos::LOG<<"heading to true in returning"<<endl;
-        //SetIsHeadingToNest(false); // Turn off error for this
-        //SetTarget(LoopFunctions->NestPosition);
-        //randomly search for the nest
-        argos::Real USCV = LoopFunctions->UninformedSearchVariation.GetValue();
-        argos::Real rand = RNG->Gaussian(USCV);
-
-        argos::CRadians rotation(rand);
-        argos::CRadians angle1(rotation);
-        argos::CRadians angle2(GetHeading());
-        argos::CRadians turn_angle(angle1 + angle2);
-        argos::CVector2 turn_vector(SearchStepSize, turn_angle);
-        SetIsHeadingToNest(false);
-        SetTarget(turn_vector + GetPosition());
-        }
-    }
+		#pragma endregion
+	}
 }
 
 /**
@@ -844,7 +876,7 @@ void CPFA_controller::SetHoldingFood() {
 		size_t i = 0, j = 0;
 
 		for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
-			if((GetPosition() - LoopFunctions->FoodList[i].GetLocation()).SquareLength() < FoodDistanceTolerance ) {
+			if((GetRealPosition() - LoopFunctions->FoodList[i].GetLocation()).SquareLength() < FoodDistanceTolerance ) {
 				// We found food!
 				// Now check if this food is in Quarantine Zone (if QZoneStrategy is ON)	// Ryan Luna 01/25/23
 				bool badFood = false;
@@ -944,16 +976,13 @@ void CPFA_controller::SetLocalResourceDensity() {
 	/* Calculate resource density based on the global food list positions. */
 
 	/**
-	 * QUESTION: Should a resource within a QZone count when surveying for resource density
+	 * MODIFIED: Now using the robot's true position (no offset from simulated faults)
 	 * 
-	 * HYPOTHESIS: This doesn't matter if the main resource located is fake, as a trail won't be
-	 * created either way. However if the resource is real, it depends on whether we want to recruit
-	 * bots to an area close to a QZone. It would affect how long the trail stays there recruiting bots
-	 * departing from the nest.
+	 * EXPLANATION: Here we are simulating the use of sensors to calculate resource density in the local region. 
+	 * 				We must use the true position and not the potentially faulty position the robot thinks it is in.
 	*/
-
 	for(size_t i = 0; i < LoopFunctions->FoodList.size(); i++) {
-		distance = GetPosition() - LoopFunctions->FoodList[i].GetLocation();	// modified ** Ryan Luna 11/11/22
+		distance = GetRealPosition() - LoopFunctions->FoodList[i].GetLocation();	// modified ** Ryan Luna 11/11/22
 
 		// Local food found
 		if(distance.SquareLength() < LoopFunctions->SearchRadiusSquared*2) {
@@ -968,7 +997,11 @@ void CPFA_controller::SetLocalResourceDensity() {
 		}
 	}
  
-	/* Set the fidelity position to the robot's current position. */
+	/**
+	 * Set the fidelity position to the robot's current position.
+	 * 
+	 * UNMODIFIED: We are using the robot's estimated position (potentially faulty)
+	*/
     SiteFidelityPosition = GetPosition();
     isUsingSiteFidelity = true;
     updateFidelity = true; 
@@ -1121,7 +1154,6 @@ string CPFA_controller::GetStatus(){//qilu 10/22
     
 }
 
-
 /*****
  * Return the Poisson cumulative probability at a given k and lambda.
  *****/
@@ -1139,9 +1171,14 @@ argos::Real CPFA_controller::GetPoissonCDF(argos::Real k, argos::Real lambda) {
 
 void CPFA_controller::UpdateTargetRayList() {
 	if(SimulationTick() % LoopFunctions->DrawDensityRate == 0 && LoopFunctions->DrawTargetRays == 1) {
+
+		/**
+		 * MODIFIED: Must use the robot's true position. This function is used for visualization only.
+		*/
+
 		/* Get position values required to construct a new ray */
 		argos::CVector2 t(GetTarget());
-		argos::CVector2 p(GetPosition());
+		argos::CVector2 p(GetRealPosition());
 		argos::CVector3 position3d(p.GetX(), p.GetY(), 0.02);
 		argos::CVector3 target3d(t.GetX(), t.GetY(), 0.02);
 

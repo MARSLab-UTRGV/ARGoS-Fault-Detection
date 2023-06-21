@@ -60,7 +60,13 @@ CPFA_loop_functions::CPFA_loop_functions() :
 	AltClusterLength(0),
 	UseFakeFoodOnly(false),
 	numFalsePositives(0),
-	numQZones(0)
+	numQZones(0),
+	faultInjected(false),
+	FaultNumber(0),
+	NumBotsToInject(0),
+	InjectionTime(0),
+	OffsetDistance(0),
+	FaultHighlightRadius(0)
 {}
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -113,6 +119,11 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings_node, "UseFakeFoodDoS",				UseFakeFoodDoS);				// Ryan Luna 11/13/22
 	argos::GetNodeAttribute(settings_node, "FilenameHeader",				FilenameHeader);				// Ryan Luna 12/06/22
     argos::GetNodeAttribute(settings_node, "Densify", 						densify);						// Ryan Luna 02/08/22
+	argos::GetNodeAttribute(settings_node, "FaultNumber",					FaultNumber);
+	argos::GetNodeAttribute(settings_node, "OffsetDistance",				OffsetDistance);
+	argos::GetNodeAttribute(settings_node, "NumBotsToInject",				NumBotsToInject);
+	argos::GetNodeAttribute(settings_node, "InjectionTime",					InjectionTime);
+	argos::GetNodeAttribute(settings_node, "FaultHighlightRadius",			FaultHighlightRadius);
 	FoodRadiusSquared = FoodRadius*FoodRadius;
 
     //Number of distributed foods ** modified ** Ryan Luna 11/13/22
@@ -225,6 +236,10 @@ void CPFA_loop_functions::PreStep() {
     }
 
 	UpdatePheromoneList();
+
+	if (!faultInjected){
+		FaultInjection();
+	}
 
 	// Ryan Luna 11/10/22
 	if(GetSpace().GetSimulationClock() > ResourceDensityDelay) {
@@ -364,6 +379,54 @@ void CPFA_loop_functions::PostExperiment() {
 		TerminateCount	<< 0 << ", ";
 	} else {
 		TerminateCount	<< 1 << ", ";
+	}
+}
+
+
+/**
+ * Using the defined number of bots to inject, this function randomly selects a subset of bots to inject 
+ * the fault into if the current simulation time is greater than or equal to the set injection time.
+ *
+ * @param None
+ *
+ * @return None
+ *
+ * @throws None
+ */
+void CPFA_loop_functions::FaultInjection() {
+	if (getSimTimeInSeconds() >=  InjectionTime) {
+
+		LOG << "Fault Injection: Begin..." << endl;
+
+		// Get all footbot entities
+		CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
+
+		// Check robots exist
+		if(footbots.size() < 1) return;
+
+		// Random number generator
+		std::random_device rd;
+		std::mt19937 gen(rd());
+
+		// Distribute numbers between 0 and <size of foot-bot map> - 1
+		std::uniform_int_distribution<> dis(0, footbots.size() - 1);
+
+		// Randomly select 'NumBotsToInject' many robots
+		int x = NumBotsToInject;
+
+		for(int i = 0; i < x; ++i) {
+			// Randomly select a foot-bot
+			auto it = std::next(std::begin(footbots), dis(gen));
+			CFootBotEntity& footBot = *any_cast<CFootBotEntity*>(it->second);
+
+			// Inject fault
+			BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+			CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+			LOG << "Injecting fault on foot-bot: " << footBot.GetId().c_str() << ", ";
+			c2.InjectFault(FaultNumber);
+		}
+
+		faultInjected = true;
 	}
 }
 
@@ -988,6 +1051,10 @@ void CPFA_loop_functions::ConfigureFromGenome(Real* g)
 	RateOfSiteFidelity                = g[4];
 	RateOfLayingPheromone             = g[5];
 	RateOfPheromoneDecay              = g[6];
+}
+
+argos::Real CPFA_loop_functions::getOffsetDistance(){
+	return OffsetDistance;
 }
 
 REGISTER_LOOP_FUNCTIONS(CPFA_loop_functions, "CPFA_loop_functions")

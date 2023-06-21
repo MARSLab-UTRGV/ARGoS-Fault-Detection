@@ -26,7 +26,11 @@ BaseController::BaseController() :
 	PositionNoiseStdev(0),
 	collision_counter(0),
 	collisionDelay(0),
-	RNG(argos::CRandom::CreateRNG("argos"))
+	RNG(argos::CRandom::CreateRNG("argos")),
+	hasFault(0),
+	CurrentFaultType(NONE),
+	controllerID("none"),
+	cbiasSet(false)
 {
 	// calculate the forage range and compensate for the robot's radius of 0.085m
 	argos::CVector3 ArenaSize = LF.GetSpace().GetArenaSize();
@@ -53,6 +57,10 @@ argos::CRadians BaseController::GetHeading() {
 	return z_angle;
 }
 
+void BaseController::SetControllerID(string id) {
+	controllerID = id;
+}
+
 argos::CVector2 BaseController::GetPosition() {
 	/* the robot's compass sensor gives us a 3D position */
 	argos::CVector3 position3D = compassSensor->GetReading().Position;
@@ -60,6 +68,15 @@ argos::CVector2 BaseController::GetPosition() {
 
 	float x = position3D.GetX();
 	float y = position3D.GetY();
+
+	CVector2 Offset = GenerateOffset();
+
+	// if (hasFault){
+	// 	LOG << "Offset Generated: (" << Offset.GetX() << ", " << Offset.GetY() << ')' << endl;
+	// }
+
+	x += Offset.GetX();
+	y += Offset.GetY();
 
 	// Add noise to the current position unless travelling to the nest
 	// Make the noise proportional to the distance to the target
@@ -74,6 +91,13 @@ argos::CVector2 BaseController::GetPosition() {
 	}
 	*/
 
+	return argos::CVector2(x, y);
+}
+
+argos::CVector2 BaseController::GetRealPosition() {
+	argos::CVector3 position3D = compassSensor->GetReading().Position;
+	float x = position3D.GetX();
+	float y = position3D.GetY();
 	return argos::CVector2(x, y);
 }
 
@@ -455,6 +479,79 @@ bool BaseController::IsAtTarget()
 	//argos::LOG << "IsAtTarget: TargetDistanceTolerance: " << DistTol << endl;
 
 	return (distanceToTarget < DistTol) ? (true) : (false);
+}
+
+void BaseController::SetFault(	FaultType faultCode, argos::Real desiredOffsetDistance, 
+								argos::Real desiredBiasFrequency, argos::CVector2 desiredFrozenCoordinate,
+								argos::Real desiredSignalLossDuration, argos::Real desiredDriftRatePerSecond)
+{
+	if (faultCode != NONE) {
+		hasFault = true;
+	} else {
+		hasFault = false;
+	}
+	CurrentFaultType = faultCode;
+	offsetDistance = desiredOffsetDistance;
+	biasFrequency = desiredBiasFrequency;
+	frozenCoordinate = desiredFrozenCoordinate;
+	signalLossDuration = desiredSignalLossDuration;
+	driftRatePerSecond = desiredDriftRatePerSecond;
+}
+
+void BaseController::ClearFault(){
+	SetFault(NONE);
+}
+
+CVector2 BaseController::GenerateOffset() {
+    switch (CurrentFaultType) {
+		
+		case NONE:{
+			return CVector2(0,0);
+		}
+        case C_BIAS: {
+			if (cbiasSet){
+				return cbiasOffset;
+			}
+            else{
+				return ConsistentBias();
+			}
+        }
+        // case P_BIAS: {
+        //     // Implement your logic
+        //     break;
+        // }
+        // case FREEZE: {
+        //     // Implement your logic
+        //     break;
+        // }
+        // case T_LOSS: {
+        //     // Implement your logic
+        //     break;
+        // }
+        // case DRIFT: {
+        //     // Implement your logic
+        //     break;
+        // }
+        default: {
+            throw std::runtime_error("Invalid fault type...\nCurrently Available Fault Types: Consistent Bias/Offset (C_BIAS)");
+			break;
+        }
+    }
+    // Return default value or throw an exception here if needed
+}
+
+
+/**
+ * Generate a bias/offset in a random direction given a desired distance.
+*/
+CVector2 BaseController::ConsistentBias(){
+	CRadians randomAngle = RNG->Uniform(CRange<CRadians>(CRadians::ZERO, CRadians::TWO_PI));
+	Real offset_X = offsetDistance * Cos(randomAngle);
+	Real offset_Y = offsetDistance * Sin(randomAngle);
+	cbiasOffset = CVector2(offset_X, offset_Y);
+	cbiasSet = true;
+	// LOG << "Offset Generated: " << cbiasOffset << endl;
+	return cbiasOffset;
 }
 
 //REGISTER_CONTROLLER(BaseController, "BaseController")

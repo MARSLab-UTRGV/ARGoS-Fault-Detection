@@ -1,4 +1,4 @@
-import DoS_xml_config as config
+import Fault_xml_config as config
 import os, time
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -2234,22 +2234,40 @@ def getMeanStd(rd):
     print('dbMergeMean: ' + str(dbMergeMean))
     print('dbMergeStd: ' + str(dbMergeStd))
 
+def FaultTest1():
+    XML = config.C_XML_CONFIG(1)
+
+    XML.VISUAL = True
+    XML.MAX_SIM_TIME = 900
+    XML.UseFFDoS(False)
+    XML.UseQZone(False)
+    XML.setBotCount(16)
+    XML.setDistribution(1)
+    XML.DRAW_TRAILS = 1
+
+    XML.RANDOM_SEED = 688074
+
+    XML.F_NUM = 1
+    XML.F_OFD = 1.0
+    XML.F_COUNT = 2 # Number of Faults
+    XML.F_TIME = 5 # seconds
+
+    # Cluster Distribution Settings
+    XML.NUM_RCL = 3
+    XML.RCL_X = 6
+    XML.RCL_Y = 6
+
+    XML.createXML()
+    os.system("argos3 -c ./experiments/CPFA_Fault_Simulation.xml")
+
 
 # Random Seed List
 # 
-# 
-# Pheromone waypoint bug: 120678
-# 
-# New merge with smaller radius bug: 743490
-# 
-# inf slope: 301421
-# 
-# Bot 22 stuck on south wall: 267451
-# 
+# Test Seed 1: 688074
 
 if __name__ == "__main__":
 
-    QZoneExperiment()
+    # QZoneExperiment()
     # DensityExperiment()
     # rePlotDensityExperiment()
     # testVisual()
@@ -2274,6 +2292,8 @@ if __name__ == "__main__":
     # testExperiment1Visual()
     # Experiment1()
     # rePlotExperiment1_v2()
+
+    FaultTest1()
 
 
 

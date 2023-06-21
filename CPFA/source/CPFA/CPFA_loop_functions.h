@@ -10,6 +10,10 @@
 #include <source/Base/Nest.h>	// Ryan Luna 1/24/23
 #include <cmath>				// Ryan Luna 1/25/23
 
+#include <vector>
+#include <algorithm>
+#include <random>
+
 using namespace argos;
 using namespace std;
 
@@ -69,8 +73,12 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		double getRateOfLayingPheromone();
 		double getRateOfPheromoneDecay();
 
+		argos::Real getOffsetDistance();
+
 
 		void Terminate();
+
+		void FaultInjection();
 
 	protected:
 
@@ -168,6 +176,16 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 
 		bool terminate;
 		bool densify;
+
+		/* fault injection */
+
+		bool faultInjected;
+		size_t FaultNumber;
+		size_t NumBotsToInject;
+		argos::Real InjectionTime;
+		argos::Real OffsetDistance;
+
+		argos::Real FaultHighlightRadius;
 
 
 	private:

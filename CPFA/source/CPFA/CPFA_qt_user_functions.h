@@ -31,6 +31,7 @@ class CPFA_qt_user_functions : public argos::CQTOpenGLUserFunctions {
 		void DrawPheromones();
 		void DrawTargetRays();
 		void DrawQuarantineZone();
+		void DrawFaultHighlight();
 
 		CPFA_loop_functions& loopFunctions;
  
