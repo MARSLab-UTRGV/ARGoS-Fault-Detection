@@ -1,0 +1,1 @@
+Currently only the single base-case fault is implemented, Consistent Bias/Offset. No detection method is present. (06/20/23)
