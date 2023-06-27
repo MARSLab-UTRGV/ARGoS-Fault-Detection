@@ -6,6 +6,8 @@
 #include <argos3/plugins/robots/generic/control_interface/ci_positioning_sensor.h>
 #include <argos3/plugins/robots/generic/control_interface/ci_differential_steering_actuator.h>
 #include <argos3/plugins/robots/foot-bot/control_interface/ci_footbot_proximity_sensor.h>
+#include </usr/include/argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_actuator.h>
+#include <argos3/plugins/robots/generic/control_interface/ci_range_and_bearing_sensor.h>
 #include <argos3/core/simulator/loop_functions.h>
 #include <cmath>
 #include <stack>
@@ -89,6 +91,8 @@ class BaseController : public argos::CCI_Controller {
 		argos::CCI_PositioningSensor* compassSensor;
 		argos::CCI_DifferentialSteeringActuator* wheelActuator;
 		argos::CCI_FootBotProximitySensor* proximitySensor;
+		argos::CCI_RangeAndBearingSensor* RABSensor;
+		argos::CCI_RangeAndBearingActuator* RABActuator;
 
 		// controller state variables
 		enum MovementState {
@@ -138,6 +142,11 @@ class BaseController : public argos::CCI_Controller {
 						argos::Real desiredDriftRatePerSecond = 0);
 		
 		void ClearFault();
+		void ClearRAB();
+
+		void Broadcast(std::string msg);
+		std::vector<std::tuple<std::string, argos::Real, argos::CRadians>> Receive();
+		
 
 		/******************************************************/
 

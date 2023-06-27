@@ -540,7 +540,6 @@ CVector2 BaseController::GenerateOffset() {
     // Return default value or throw an exception here if needed
 }
 
-
 /**
  * Generate a bias/offset in a random direction given a desired distance.
 */
@@ -554,4 +553,50 @@ CVector2 BaseController::ConsistentBias(){
 	return cbiasOffset;
 }
 
+/**
+ * Broadcast the input string to all controllers using the Range and Bearing Actuator
+ * 
+ * @param msg The message to be broadcast
+*/
+void BaseController::Broadcast(string msg){
+	argos::CByteArray msgBuf;
+	msgBuf << msg << ',';
+	while (msgBuf.Size() < 192){
+		if (msgBuf.Size() < 192){
+			msgBuf << uint8_t(0);
+		} else {
+			break;
+		}
+	}
+	if (msgBuf.Size() > 192){
+		LOG << "msgBuf size: " << msgBuf.Size() << endl;
+		LOG << "msgBuf: " << msgBuf << endl;
+		LOG << "msg: " << msg << endl;
+	}
+	// LOG << "send: " << msgBuf << endl;
+	RABActuator->SetData(msgBuf);
+}
+
+/**
+ * Receive the broadcasted data from all controllers using the Range and Bearing Sensor
+ * 
+ * @return The received data as vector of tuples containing the message, range, and bearing.
+*/
+vector<tuple<string, Real, CRadians>> BaseController::Receive(){
+	const CCI_RangeAndBearingSensor::TReadings& packetQ = RABSensor->GetReadings();
+	vector<tuple<string, Real, CRadians>> dataQ;
+
+	for (const CCI_RangeAndBearingSensor::SPacket& p : packetQ) {
+		string dataStr(reinterpret_cast<const char*>(p.Data.ToCArray()), p.Data.Size());
+		// LOG << "receive: " << p.Data << endl;
+
+		dataQ.push_back(make_tuple(dataStr, p.Range, p.HorizontalBearing));
+	}
+
+	return dataQ;
+}
+
+void BaseController::ClearRAB(){
+	RABActuator->ClearData();
+}
 //REGISTER_CONTROLLER(BaseController, "BaseController")

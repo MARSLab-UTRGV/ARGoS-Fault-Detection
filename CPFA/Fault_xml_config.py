@@ -96,6 +96,18 @@ class C_XML_CONFIG:
         self.F_TIME =            0                       # Injection time
         self.F_HL_RAD =          0.25                    # Faulty bot highlight radius
 
+        # Fault Detection Loop Function Settings
+        self.USE_FD =            "true"                  # Turn on/off fault detection
+        self.VCAP =              3                       # Vote Capacity
+
+        # Range and Bearing Settings
+        self.SHOW_RAB_RAYS =    "true"                   # turn on/off range and bearing sensor rays
+        self.RAB_NOISE =        0.00                     # Range and Bearing Sensor Noise Std Dev
+        self.RAB_DROP =         0.00                     # Range and Bearing Sensor Packet Drop Probability
+        self.RAB_RANGE =        3.00                     # Sensor Range
+        self.RAB_CK_OCC =       "false"                  # turn on/off occlusion check
+        self.RAB_DATA_SIZE =    64                       # Range and Bearing Data Size
+
         # Other Loop Function Settings
         self.DRAW_ID =           1                       # Draw bot IDs
         self.DRAW_TARGET_RAYS =  0                       # Draw directional rays to target (for each bot)
@@ -322,6 +334,11 @@ class C_XML_CONFIG:
         leds.setAttribute('implementation','default')
         leds.setAttribute('medium','leds')
         actuators.appendChild(leds)
+
+        #               <range_and_bearing>
+        rab_actuator = xml.createElement('range_and_bearing')
+        rab_actuator.setAttribute('implementation','default')
+        actuators.appendChild(rab_actuator)
         #           </actuators
 
         #           <sensors>
@@ -343,6 +360,15 @@ class C_XML_CONFIG:
         fb_mg = xml.createElement('footbot_motor_ground')
         fb_mg.setAttribute('implementation','rot_z_only')
         sensors.appendChild(fb_mg)
+
+        #               <range_and_bearing>
+        rab_sensor = xml.createElement('range_and_bearing')
+        rab_sensor.setAttribute('implementation','medium')
+        rab_sensor.setAttribute('medium','rab')
+        rab_sensor.setAttribute('show_rays',str(self.SHOW_RAB_RAYS))
+        rab_sensor.setAttribute('noise_std_dev',str(self.RAB_NOISE))
+        rab_sensor.setAttribute('packet_drop_prob',str(self.RAB_DROP))
+        sensors.appendChild(rab_sensor)
         #           </sensors
 
         #           <params>
@@ -427,6 +453,9 @@ class C_XML_CONFIG:
         lf_settings.setAttribute('NumBotsToInject', str(self.F_COUNT))
         lf_settings.setAttribute('InjectionTime', str(self.F_TIME))
         lf_settings.setAttribute('FaultHighlightRadius', str(self.F_HL_RAD))
+        lf_settings.setAttribute('VoteCap', str(self.VCAP))
+        lf_settings.setAttribute('UseFaultDetection', str(self.USE_FD))
+        lf_settings.setAttribute("CommunicationDistance", str(self.RAB_RANGE))
         loops.appendChild(lf_settings)
         #       </settings>
         #   </loop_functions>
@@ -527,6 +556,8 @@ class C_XML_CONFIG:
         #               <foot-bot>
             fb0 = xml.createElement('foot-bot')
             fb0.setAttribute('id','fb0')
+            fb0.setAttribute('rab_range', str(self.RAB_RANGE))
+            fb0.setAttribute('rab_data_size', str(self.RAB_DATA_SIZE))
             entity0.appendChild(fb0)
 
         #                   <controller>
@@ -566,6 +597,8 @@ class C_XML_CONFIG:
         #               <foot-bot>
             fb1 = xml.createElement('foot-bot')
             fb1.setAttribute('id','fb1')
+            fb1.setAttribute('rab_range', str(self.RAB_RANGE))
+            fb1.setAttribute('rab_data_size', str(self.RAB_DATA_SIZE))
             entity1.appendChild(fb1)
 
         #                   <controller>
@@ -604,6 +637,8 @@ class C_XML_CONFIG:
         #               <foot-bot>
             fb2 = xml.createElement('foot-bot')
             fb2.setAttribute('id','fb2')
+            fb2.setAttribute('rab_range', str(self.RAB_RANGE))
+            fb2.setAttribute('rab_data_size', str(self.RAB_DATA_SIZE))
             entity2.appendChild(fb2)
 
         #                   <controller>
@@ -642,6 +677,8 @@ class C_XML_CONFIG:
         #               <foot-bot>
             fb3 = xml.createElement('foot-bot')
             fb3.setAttribute('id','fb3')
+            fb3.setAttribute('rab_range', str(self.RAB_RANGE))
+            fb3.setAttribute('rab_data_size', str(self.RAB_DATA_SIZE))
             entity3.appendChild(fb3)
 
         #                   <controller>
@@ -672,6 +709,12 @@ class C_XML_CONFIG:
         leds = xml.createElement('led')
         leds.setAttribute('id','leds')
         media.appendChild(leds)
+
+        #       <range and bearing>
+        rab = xml.createElement('range_and_bearing')
+        rab.setAttribute('id','rab')
+        rab.setAttribute('check_occlusions',str(self.RAB_CK_OCC))
+        media.appendChild(rab)
         #   </media>
 
 

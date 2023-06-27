@@ -25,7 +25,9 @@ CPFA_controller::CPFA_controller() :
 	MergeMode(0),
 	FFdetectionAcc(0.0),
 	RFdetectionAcc(0.0),
-	faultInjected(false)
+	faultInjected(false),
+	faultDetected(false),
+	faultLogged(false)
 {
 }
 
@@ -33,6 +35,9 @@ void CPFA_controller::Init(argos::TConfigurationNode &node) {
 	compassSensor   = GetSensor<argos::CCI_PositioningSensor>("positioning");
 	wheelActuator   = GetActuator<argos::CCI_DifferentialSteeringActuator>("differential_steering");
 	proximitySensor = GetSensor<argos::CCI_FootBotProximitySensor>("footbot_proximity");
+	RABSensor       = GetSensor<argos::CCI_RangeAndBearingSensor>("range_and_bearing");
+	RABActuator     = GetActuator<argos::CCI_RangeAndBearingActuator>("range_and_bearing");
+
 	argos::TConfigurationNode settings = argos::GetNode(node, "settings");
 
 	argos::GetNodeAttribute(settings, "FoodDistanceTolerance",   	FoodDistanceTolerance);
@@ -64,7 +69,7 @@ void CPFA_controller::Init(argos::TConfigurationNode &node) {
 	*/
 	SetTarget(p);
     controllerID= GetId();
-	// SetControllerID(controllerID);
+	SetControllerID(controllerID);
     m_pcLEDs   = GetActuator<CCI_LEDsActuator>("leds");
     controllerID= GetId();//qilu 07/26/2016
 	m_pcLEDs->SetAllColors(CColor::GREEN);
@@ -114,6 +119,8 @@ void CPFA_controller::RemoveLocalFood(Food F){
 
 void CPFA_controller::ControlStep() {
 
+	#pragma region Draw Trails
+
 	// Add line so we can draw the trail
 
 	/**
@@ -129,9 +136,60 @@ void CPFA_controller::ControlStep() {
 
 	previous_position = GetRealPosition();
 
+	#pragma endregion
+
+	// check if the vote cap has been reached
+	if (voterIDs.size() >= LoopFunctions->VoteCap){
+		// process votes
+		// if (controllerID == "fb00") LOG << "fboo processing votes. Time:" << LoopFunctions->getSimTimeInSeconds() << endl;
+		ProcessVotes();
+		voterIDs.clear();
+	}
+	if (faultDetected && !faultLogged){
+		stringstream ssLog;
+		ssLog << "Fault Detected in foot-bot: " << controllerID;
+		ssLog << " Perceived Coord: (" << GetPosition().GetX() << ", " << GetPosition().GetY() << ") True Coord: (" << GetRealPosition().GetX() << ", " << GetRealPosition().GetY() << ")" << endl;
+		faultLogged = true;
+		throw std::runtime_error(ssLog.str());
+	}
+
 	//UpdateTargetRayList();
 	CPFA();
 	Move();
+
+	/**
+	 * Do fault detection if it is enabled and the bot doesn't have a fault that has been detected
+	*/
+
+	// // reset response logged boolean to repeat fault detection process
+	// // if (fmod(LoopFunctions->BroadcastFrequency,LoopFunctions->getSimTimeInSeconds() == 0)){
+	// if (LoopFunctions->getSimTimeInSeconds() - lastBroadcastTime >= LoopFunctions->BroadcastFrequency){
+	// 	responseLogged = false;
+	// 	if (controllerID == "fb00") LOG << "fb00 responseLogged set False," << setw(setwidth) << right << "Time:" << LoopFunctions->getSimTimeInSeconds() << endl;
+	// }
+
+	// // only begin fault detection process if the response has not been logged
+	// // the response logged signifies that the last step of the process has been completed
+	// // and we must wait till the next broadcast period to begin the process again
+	// // response logged is set to true in ProcessMessages() once the replies are being processed
+	// if (!responseLogged){
+	// 	if (LoopFunctions->UseFaultDetection && !faultDetected){
+	// 		/* Monitor for messages every control step */
+	// 		if (controllerID == "fb00") LOG << "fb00 processing messages," << setw(setwidth) << right << "Time:" << LoopFunctions->getSimTimeInSeconds() << endl;
+	// 		ProcessMessages();
+	// 		/* Broadcast location every 5 seconds */
+	// 		// if (fmod(LoopFunctions->BroadcastFrequency,LoopFunctions->getSimTimeInSeconds()) == 0){
+	// 		if (LoopFunctions->getSimTimeInSeconds() - lastBroadcastTime >= LoopFunctions->BroadcastFrequency){
+	// 			if (controllerID == "fb00") LOG << "fb00 broadcasting location" << setw(setwidth) << right << "Time:" << LoopFunctions->getSimTimeInSeconds() << endl;
+	// 			BroadcastLocation();
+	// 			lastBroadcastTime = LoopFunctions->getSimTimeInSeconds();
+	// 		} else if (!responseQueue.empty()){	
+	// 			if (controllerID == "fb00") LOG << "fb00 broadcasting response," << setw(setwidth) << right << "Time:" << LoopFunctions->getSimTimeInSeconds() << endl;
+	// 			BroadcastTargetedResponse();
+	// 			// if (controllerID == "fb00") LOG << "fb00 broadcast response. " << ", Voter list size: " << voterIDs.size() << endl;
+	// 		}
+	// 	}
+	// }
 }
 
 void CPFA_controller::InjectFault(size_t faultCode){
@@ -1201,6 +1259,176 @@ void CPFA_controller::UpdateTargetRayList() {
 			// loopFunctions.TargetRayList.push_back(myTrail);
 		}
 	}
+}
+
+
+/**
+ * Broadcast the location of the robot to all other robots.
+ * Format of message: <message_type>,<id>,<x_value>,<y_value>
+ * e.g. "b,fb01,1,2"
+*/
+void CPFA_controller::BroadcastLocation(){
+	string selfID = controllerID;
+
+	ostringstream ossPos;
+	ossPos << fixed << setprecision(3) << GetPosition().GetX() << "," << GetPosition().GetY();
+
+	string selfPos = ossPos.str();
+
+	Broadcast("b," + selfID + "," + selfPos);
+}
+
+void CPFA_controller::ProcessMessages(char mode){
+	vector<tuple<string, Real, CRadians>> msgQueue = Receive();
+	// LOG << LoopFunctions->getSimTimeInSeconds() << endl;
+
+	for(auto it = msgQueue.begin(); it != msgQueue.end(); ++it) {
+
+		// process message (the message should always begin with the message type)
+		stringstream ss(get<0>(*it));
+		// LOG << "converted: " << ss.str() << endl;
+		string msgType;
+		getline(ss, msgType, ',');
+
+		// if (controllerID == "fb00") LOG << "fb00 received: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+		if (mode == 'b'){
+			if (msgType == "r"){ 
+				// LOG << "WARNING: received response type message during broadcast mode in ProcessMessages()" << endl;
+			} else if (msgType == "b"){
+				string senderID, x_str, y_str;
+				getline(ss, senderID, ',');
+				getline(ss, x_str, ',');
+				getline(ss, y_str, ',');
+				CVector2 senderEstPos(stod(x_str), stod(y_str)); 	// position given by the sender (possibly faulted)
+				Real signalRange = get<1>(*it);						// range of signal provided by RAB Sensor
+				CRadians signalBearing = get<2>(*it);				// bearing of signal provided by RAB Sensor
+				// if (controllerID == "fb00") LOG << "fb00 received broadast: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+				responseQueue.push(make_pair(senderID, LocalizationCheck(senderEstPos, signalRange, signalBearing, senderID)));
+				broadcastProcessed = true;
+			}
+			else if (ss.eof()){
+				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+			} else {
+				LOG << "runtime_error: " << msgType << endl;
+				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
+			}
+		} else if (mode == 'r'){
+			if (msgType == "b") LOG << "WARNING: received broadcast type message during response mode in ProcessMessages()" << endl;
+			else if (msgType == "r"){
+				// if (controllerID == "fb00") LOG << "fb00 received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+				// else LOG << controllerID << " received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+				while (!ss.eof()){
+					string targetID, senderID, f_str;
+					getline(ss, targetID, ',');
+					getline(ss, senderID, ',');
+					getline(ss, f_str, ',');
+					
+					// check if the message is for this bot and make sure the sender hasn't already voted
+					if (controllerID == targetID && voterIDs.find(senderID) == voterIDs.end()){
+						
+						bool faulty = stoi(f_str);		// fault boolean
+						voteQueue.push_back(faulty);	// store vote
+						voterIDs.insert(senderID);		// store voter ID
+
+						// if (controllerID == "fb00") LOG << "fb00 responseLogged set to True" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+					}
+				}
+				responseProcessed = true;
+			}
+			else if (ss.eof()){
+				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+			} else {
+				LOG << "runtime_error: " << msgType << endl;
+				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
+			}
+		} else {
+			throw runtime_error("Unknown mode for ProcessMessages() encountered...");
+		}
+	}
+}
+
+/**
+ * Calculate a coordinate from a given bearing and range and compare it against the given coordinate.
+ * @return true if the given coordinate matches the calculated coordinate.
+*/
+bool CPFA_controller::LocalizationCheck(CVector2 givenCoord, Real range, CRadians bearing, string senderID){
+
+	// must consider our orientation and adjust the bearing to compensate
+	CRadians adjustedBearing = bearing + GetHeading();
+
+	// construct a vector from the receiver to the sender (CVector2 will automatically convert this to cartesian coordinates)
+	// range is given in cm from the RAB sensor and must be converted to meters for use with the coordinate system (source: https://opentechschool-brussels.github.io/AI-for-robots-and-swarms/ref_argos.html)
+	CVector2 offset(range/100, adjustedBearing);
+
+	// Calculate the origin of the signal (the estimated position of the sender)
+	CVector2 origin = GetPosition() + offset;
+
+	CVector2 realOffset = GetPosition() - LoopFunctions->getTargetLocation(senderID);
+	if (realOffset != offset){
+		// throw runtime_error("Real offset = " + to_string(realOffset.GetX()) + ", " + to_string(realOffset.GetY()) + ", calculated offset = " + to_string(offset.GetX()) + ", " + to_string(offset.GetY()));
+	}
+
+	// Check if the given coordinate is within the acceptable range of the calculated coordinate (the origin of the signal)
+	if ((givenCoord - origin).Length() < 0.5){
+		// LOG << "true coord detected" << endl;
+		return true;
+	} else {
+		LOG << "Robot " << controllerID << " detected localization error in footbot "<< senderID << endl;
+		LOG << "Given coord: " << givenCoord << ", Calculated coord: " << origin << ", Real coord: "<< LoopFunctions->getTargetLocation(senderID) << endl;
+		// throw runtime_error("Robot " + controllerID + " detected localization error in footbot " + senderID);
+		return false;
+	}
+}
+
+/**
+ * Broadcast the responses to all other robots in a single long message.
+*/
+void CPFA_controller::BroadcastTargetedResponse(){
+	stringstream  ss;
+	ss << "r,";
+
+	/**
+	 * Format of message: <message_type>,<target_id>,<sender_id>,<vote_boolean>,<target_id>,<sender_id>,<vote_boolean>,...
+	*/
+	while(!responseQueue.empty()){
+		if (responseQueue.size() == 1) { // don't add comma at the end
+			ss << responseQueue.front().first << "," << controllerID << "," << responseQueue.front().second;
+			responseQueue.pop();
+		} else {
+			ss << responseQueue.front().first << "," << controllerID << "," << responseQueue.front().second << ",";
+			responseQueue.pop();
+		}
+	}
+	/* Broadcast the message. */
+	Broadcast(ss.str());
+	// if (controllerID == "fb00") LOG << "fb00 responded: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+}
+void CPFA_controller::ProcessVotes(){
+	size_t trueCount = 0;	// coordinate was correct
+	size_t falseCount = 0;	// coordinate was incorrect
+	for(const auto& vote : voteQueue){
+		if (vote) trueCount++;
+		else falseCount++;
+	}
+	if (trueCount < falseCount) faultDetected = true;
+	if (hasFault && !faultDetected){
+		LOG << controllerID << ": false negative, voteQueue: ";
+		for (const auto& vote : voteQueue){
+			LOG << vote << ",";
+		}
+		LOG << endl;
+	} else if (!hasFault && faultDetected){
+		LOG << controllerID << ": false positive, voteQueue: ";
+		for (const auto& vote : voteQueue){
+			LOG << vote << ",";
+		}
+		LOG << endl;
+	}
+	voteQueue.clear();
+}
+
+void CPFA_controller::ClearRABData(){
+	ClearRAB();
 }
 
 REGISTER_CONTROLLER(CPFA_controller, "CPFA_controller")

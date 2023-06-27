@@ -2237,7 +2237,7 @@ def getMeanStd(rd):
 def FaultTest1():
     XML = config.C_XML_CONFIG(1)
 
-    XML.VISUAL = True
+    XML.VISUAL = False
     XML.MAX_SIM_TIME = 900
     XML.UseFFDoS(False)
     XML.UseQZone(False)
@@ -2251,6 +2251,7 @@ def FaultTest1():
     XML.F_OFD = 1.0
     XML.F_COUNT = 2 # Number of Faults
     XML.F_TIME = 5 # seconds
+    XML.RAB_DATA_SIZE = 192
 
     # Cluster Distribution Settings
     XML.NUM_RCL = 3
@@ -2260,6 +2261,8 @@ def FaultTest1():
     XML.createXML()
     os.system("argos3 -c ./experiments/CPFA_Fault_Simulation.xml")
 
+
+# udacity coupon code: RCT4BE6RB6LR9K7F
 
 # Random Seed List
 # 

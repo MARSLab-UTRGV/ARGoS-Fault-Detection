@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include/argos3/**",
+                "/usr/include/argos3/plugins/robots/generic/control_interface",
+                "/usr/include/lua5.3"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "${default}",
+            "compileCommands": "${workspaceFolder}/CPFA/build/compile_commands.json"
+        }
+    ],
+    "version": 4
+}

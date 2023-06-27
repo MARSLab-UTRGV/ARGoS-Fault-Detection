@@ -80,6 +80,8 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 
 		void FaultInjection();
 
+		void FaultDetection();
+
 	protected:
 
 		void setScore(double s);
@@ -187,6 +189,23 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 
 		argos::Real FaultHighlightRadius;
 
+		/* fault detection */
+
+		bool UseFaultDetection;
+		argos::Real CommunicationDistance;
+		size_t VoteCap;
+		argos::Real BroadcastFrequency;	// in seconds
+		argos::Real lastBroadcastTime = 0;
+
+		bool broadcastDone = false;
+		bool processBroadcastDone = false;
+		bool respondDone = false;
+		bool processRespondDone = false;
+
+		size_t CommunicationMode = 0;
+
+		CVector2 getTargetLocation(string targetID);
+
 
 	private:
 
@@ -203,6 +222,8 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		bool IsCollidingWithFood(argos::CVector2 p);
 		double score;
 		int PrintFinalScore;
+
+
 };
 
 #endif /* CPFA_LOOP_FUNCTIONS_H */

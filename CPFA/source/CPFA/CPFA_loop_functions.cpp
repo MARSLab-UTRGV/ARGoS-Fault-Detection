@@ -66,7 +66,11 @@ CPFA_loop_functions::CPFA_loop_functions() :
 	NumBotsToInject(0),
 	InjectionTime(0),
 	OffsetDistance(0),
-	FaultHighlightRadius(0)
+	FaultHighlightRadius(0),
+	UseFaultDetection(false),
+	CommunicationDistance(2.0), 
+	VoteCap(3),
+	BroadcastFrequency(5)
 {}
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -124,6 +128,10 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings_node, "NumBotsToInject",				NumBotsToInject);
 	argos::GetNodeAttribute(settings_node, "InjectionTime",					InjectionTime);
 	argos::GetNodeAttribute(settings_node, "FaultHighlightRadius",			FaultHighlightRadius);
+	argos::GetNodeAttribute(settings_node, "UseFaultDetection",				UseFaultDetection);
+	argos::GetNodeAttribute(settings_node, "CommunicationDistance",			CommunicationDistance);
+	argos::GetNodeAttribute(settings_node, "VoteCap",						VoteCap);
+
 	FoodRadiusSquared = FoodRadius*FoodRadius;
 
     //Number of distributed foods ** modified ** Ryan Luna 11/13/22
@@ -261,7 +269,8 @@ void CPFA_loop_functions::PreStep() {
 }
 
 void CPFA_loop_functions::PostStep() {
-	// do nothing
+	// do fault detection post step
+	FaultDetection();
 }
 
 void CPFA_loop_functions::Terminate(){
@@ -430,6 +439,111 @@ void CPFA_loop_functions::FaultInjection() {
 	}
 }
 
+/**
+ * This function handles the fault detection mechanism. This is handled in the loop function code
+ * to fascilitate synchronization of the fault detection process.
+ * 
+ * @param None
+ *
+ * @return None
+ *
+ * @throws None
+*/
+void CPFA_loop_functions::FaultDetection() {
+
+	argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
+	argos::CSpace::TMapPerType::iterator it;
+
+	switch (CommunicationMode){
+		case 0:{
+			// broadcast location every 5 seconds
+			if (getSimTimeInSeconds() - lastBroadcastTime >= BroadcastFrequency){
+				// location broadcast
+				LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Broadcasting Location: Begin... ********" << endl;
+				for(it = footbots.begin(); it != footbots.end(); it++) {
+					argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+					BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+					CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+					c2.BroadcastLocation();
+					c2.broadcastProcessed = false;
+					c2.responseProcessed = false;
+				}
+				lastBroadcastTime = getSimTimeInSeconds();
+				// broadcastDone = true;
+				CommunicationMode = 1;
+				LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Broadcasting Location: Done. ********" << endl;
+			}
+			break;
+		}
+		case 1:{
+			CommunicationMode = 2;
+			// process broadcasted messages
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Begin..." << endl;
+			for(it = footbots.begin(); it != footbots.end(); it++) {
+				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+				c2.ProcessMessages('b');
+				if (!c2.broadcastProcessed){
+					CommunicationMode = 1;
+				}
+			}
+			if (CommunicationMode == 2) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Complete" << endl;
+			else if (CommunicationMode == 1) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Ongoing..." << endl;
+			break;
+		}
+		case 2:{
+			// response broadcast
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Broadcast: Begin..." << endl;
+			for(it = footbots.begin(); it != footbots.end(); it++) {
+				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+				c2.BroadcastTargetedResponse();
+			}
+			CommunicationMode = 3;
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Broadcast: Done." << endl;
+			break;
+		}
+		case 3:{
+			CommunicationMode = 0;
+			// process responses
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Begin..." << endl;
+			for(it = footbots.begin(); it != footbots.end(); it++) {
+				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+				c2.ProcessMessages('r');
+				if (!c2.responseProcessed){
+					CommunicationMode = 3;
+				}
+			}
+			if (CommunicationMode == 0) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Complete" << endl;
+			else if (CommunicationMode == 3) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Ongoing..." << endl;
+			break;
+		}
+		default:{
+			LOG << "Fault Detection: Unknown Communication Mode: " << CommunicationMode << endl;
+		}
+	}
+
+	if (getSimTimeInSeconds() >=15) throw std::runtime_error("Fault Detection: Timeout");
+}
+
+argos::CVector2 CPFA_loop_functions::getTargetLocation(string targetID){
+	argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
+	argos::CSpace::TMapPerType::iterator it;
+
+	for(it = footbots.begin(); it != footbots.end(); it++) {
+		argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+		BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+		CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+		if (footBot.GetId() == targetID){
+			return c2.GetRealPosition();
+		}
+	}
+	return argos::CVector2::ZERO;
+}
 
 argos::CColor CPFA_loop_functions::GetFloorColor(const argos::CVector2 &c_pos_on_floor) {
 	return argos::CColor::WHITE;

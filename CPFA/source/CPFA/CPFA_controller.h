@@ -11,6 +11,9 @@
 #include <source/Base/QuarantineZone.h>
 #include <source/Base/Food.h>
 
+#include <unordered_set>
+#include <queue>
+
 using namespace std;
 using namespace argos;
 
@@ -58,6 +61,17 @@ class CPFA_controller : public BaseController {
 		void InjectFault(size_t faultCode);
 		bool HasFault();
 		bool ActuallyIsInTheNest();
+
+		/* fault detection */
+
+		void BroadcastLocation();
+		void ProcessMessages(char mode);
+		bool LocalizationCheck(CVector2 givenCoord, Real range, CRadians bearing, string senderID);
+		void BroadcastTargetedResponse();
+		void ClearRABData();
+
+		bool broadcastProcessed = false;
+		bool responseProcessed = false;
 
 	private:
 
@@ -143,6 +157,17 @@ class CPFA_controller : public BaseController {
 		bool isUsingPheromone;
 
 		bool faultInjected;
+		vector<bool> voteQueue;				// for storing vote results
+		unordered_set<string> voterIDs;		// for storing IDs of those who voted (can't vote twice)
+		void ProcessVotes();
+		bool faultDetected;
+		bool faultLogged;
+		queue<pair<string, bool>> responseQueue;
+		// bool broadcastLogged = false;
+		float lastBroadcastTime;
+
+		int setwidth = 3;
+
 
 		unsigned int survey_count;
 		/* Pointer to the LEDs actuator */
