@@ -21,10 +21,9 @@ There are four processes that should happen sequentially and periodically (at a 
     -   In the loop function, based on the comparison results, construct a response message in a specified format (e.g., a list) to inform the initial sender(s) about the correctness of their broadcasted location.
     -   Broadcast the response message using the RAB actuator.
 4.	Processing the Responses:
-    -   Implement a voting scheme to process the received responses from other robots.
+    -   Implement a consensus mechanism to process the received responses from other robots.
     -   Maintain a record of which robots have voted and ensure that no robot can vote twice on the same robot.
     -   Once the voting cap is reached, analyze the votes for each robot to determine if there is a fault.
     -   If a fault is detected (i.e., a sufficient number of "wrong location" votes), the robot can admit to the fault and take appropriate action.
  
-The voting scheme is simple, record the votes received from other robots in a queue and store the sender’s ID to make sure only one vote is recorded per robot. Every control step, check to see if the size of the queue meets the specified vote cap. Once reached, votes are popped from the queue and counted. If there is a tie, nothing is done and is treated as a pass (can continue operation). 
-
+The consensus mechanism is simple, record the votes received from other robots in a queue and store the sender’s ID to make sure only one vote is recorded per robot. Every control step, check to see if the size of the queue meets the specified vote cap. Once reached, votes are popped from the queue and counted. If there is a tie, nothing is done and is treated as a pass (can continue operation). 
