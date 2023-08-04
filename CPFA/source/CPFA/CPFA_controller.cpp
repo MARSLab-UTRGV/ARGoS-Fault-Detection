@@ -1261,7 +1261,6 @@ void CPFA_controller::UpdateTargetRayList() {
 	}
 }
 
-
 /**
  * Broadcast the location of the robot to all other robots.
  * Format of message: <message_type>,<id>,<x_value>,<y_value>
@@ -1278,6 +1277,84 @@ void CPFA_controller::BroadcastLocation(){
 	Broadcast("b," + selfID + "," + selfPos);
 }
 
+void CPFA_controller::RequestEstimate(){
+	string selfID = controllerID;
+	Broadcast("q," + selfID);
+}
+
+/***** ARCHIVED *****/
+#pragma region ProcessMessages() old_version // section commented out
+// void CPFA_controller::ProcessMessages(char mode){
+// 	vector<tuple<string, Real, CRadians>> msgQueue = Receive();
+// 	// LOG << LoopFunctions->getSimTimeInSeconds() << endl;
+
+// 	for(auto it = msgQueue.begin(); it != msgQueue.end(); ++it) {
+
+// 		// process message (the message should always begin with the message type)
+// 		stringstream ss(get<0>(*it));
+// 		// LOG << "converted: " << ss.str() << endl;
+// 		string msgType;
+// 		getline(ss, msgType, ',');
+
+// 		// if (controllerID == "fb00") LOG << "fb00 received: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 		if (mode == 'b'){
+// 			if (msgType == "r"){ 
+// 				// LOG << "WARNING: received response type message during broadcast mode in ProcessMessages()" << endl;
+// 			} else if (msgType == "b"){
+// 				string senderID, x_str, y_str;
+// 				getline(ss, senderID, ',');
+// 				getline(ss, x_str, ',');
+// 				getline(ss, y_str, ',');
+// 				CVector2 senderEstPos(stod(x_str), stod(y_str)); 	// position given by the sender (possibly faulted)
+// 				Real signalRange = get<1>(*it);						// range of signal provided by RAB Sensor
+// 				CRadians signalBearing = get<2>(*it);				// bearing of signal provided by RAB Sensor
+// 				// if (controllerID == "fb00") LOG << "fb00 received broadast: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 				responseQueue.push(make_pair(senderID, LocalizationCheck(senderEstPos, signalRange, signalBearing, senderID)));
+// 				broadcastProcessed = true;
+// 			}
+// 			else if (ss.eof()){
+// 				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 			} else {
+// 				LOG << "runtime_error: " << msgType << endl;
+// 				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
+// 			}
+// 		} else if (mode == 'r'){
+// 			if (msgType == "b") LOG << "WARNING: received broadcast type message during response mode in ProcessMessages()" << endl;
+// 			else if (msgType == "r"){
+// 				// if (controllerID == "fb00") LOG << "fb00 received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 				// else LOG << controllerID << " received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 				while (!ss.eof()){
+// 					string targetID, senderID, f_str;
+// 					getline(ss, targetID, ',');
+// 					getline(ss, senderID, ',');
+// 					getline(ss, f_str, ',');
+					
+// 					// check if the message is for this bot and make sure the sender hasn't already voted
+// 					if (controllerID == targetID && voterIDs.find(senderID) == voterIDs.end()){
+						
+// 						bool faulty = stoi(f_str);		// fault boolean
+// 						voteQueue.push_back(faulty);	// store vote
+// 						voterIDs.insert(senderID);		// store voter ID
+
+// 						// if (controllerID == "fb00") LOG << "fb00 responseLogged set to True" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 					}
+// 				}
+// 				responseProcessed = true;
+// 			}
+// 			else if (ss.eof()){
+// 				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+// 			} else {
+// 				LOG << "runtime_error: " << msgType << endl;
+// 				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
+// 			}
+// 		} else {
+// 			throw runtime_error("Unknown mode for ProcessMessages() encountered...");
+// 		}
+// 	}
+// }
+#pragma endregion
+/***** ARCHIVED *****/
+
 void CPFA_controller::ProcessMessages(char mode){
 	vector<tuple<string, Real, CRadians>> msgQueue = Receive();
 	// LOG << LoopFunctions->getSimTimeInSeconds() << endl;
@@ -1291,43 +1368,55 @@ void CPFA_controller::ProcessMessages(char mode){
 		getline(ss, msgType, ',');
 
 		// if (controllerID == "fb00") LOG << "fb00 received: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
-		if (mode == 'b'){
+		if (mode == 'q'){
 			if (msgType == "r"){ 
 				// LOG << "WARNING: received response type message during broadcast mode in ProcessMessages()" << endl;
-			} else if (msgType == "b"){
+
+			} else if (msgType == "q"){
+
 				string senderID, x_str, y_str;
 				getline(ss, senderID, ',');
-				getline(ss, x_str, ',');
-				getline(ss, y_str, ',');
-				CVector2 senderEstPos(stod(x_str), stod(y_str)); 	// position given by the sender (possibly faulted)
+
 				Real signalRange = get<1>(*it);						// range of signal provided by RAB Sensor
 				CRadians signalBearing = get<2>(*it);				// bearing of signal provided by RAB Sensor
 				// if (controllerID == "fb00") LOG << "fb00 received broadast: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
-				responseQueue.push(make_pair(senderID, LocalizationCheck(senderEstPos, signalRange, signalBearing, senderID)));
+				
+				/**
+				 * The offset between the signal origin and the robot.
+				 * - The signal range from the RAB sensor is given in cm, so we convert to meters.
+				 * - The bearing from the RAB sensor is given relative to the robot, so we must consider the 
+				 * 		robot's heading to convert it into a global representation.
+				*/
+				CVector2 offset(signalRange/100, signalBearing+GetHeading());
+				CVector2 estimate = GetPosition() + offset;
+				responseQueue.push(make_tuple(senderID, estimate.GetX(), estimate.GetY()));
 				broadcastProcessed = true;
-			}
-			else if (ss.eof()){
+
+			}else if (ss.eof()){
 				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
+			
 			} else {
 				LOG << "runtime_error: " << msgType << endl;
 				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
 			}
+
 		} else if (mode == 'r'){
 			if (msgType == "b") LOG << "WARNING: received broadcast type message during response mode in ProcessMessages()" << endl;
 			else if (msgType == "r"){
 				// if (controllerID == "fb00") LOG << "fb00 received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
 				// else LOG << controllerID << " received response" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
 				while (!ss.eof()){
-					string targetID, senderID, f_str;
+					string targetID, senderID, est;
 					getline(ss, targetID, ',');
 					getline(ss, senderID, ',');
-					getline(ss, f_str, ',');
+					getline(ss, est_X, ',');
+					getline(ss, est_Y, ',');
 					
 					// check if the message is for this bot and make sure the sender hasn't already voted
 					if (controllerID == targetID && voterIDs.find(senderID) == voterIDs.end()){
 						
-						bool faulty = stoi(f_str);		// fault boolean
-						voteQueue.push_back(faulty);	// store vote
+						CVector2 est_pos (stoi(est_X), stoi(est_Y));		// estimate position from other bots
+						estimationQueue.push_back(est_pos);	// store vote
 						voterIDs.insert(senderID);		// store voter ID
 
 						// if (controllerID == "fb00") LOG << "fb00 responseLogged set to True" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
@@ -1347,38 +1436,42 @@ void CPFA_controller::ProcessMessages(char mode){
 	}
 }
 
+/***** ARCHIVED *****/
+#pragma region LocalizationCheck() //section commented out
 /**
  * Calculate a coordinate from a given bearing and range and compare it against the given coordinate.
  * @return true if the given coordinate matches the calculated coordinate.
 */
-bool CPFA_controller::LocalizationCheck(CVector2 givenCoord, Real range, CRadians bearing, string senderID){
+// CVector2 CPFA_controller::LocalizationCheck(Real range, CRadians bearing, string senderID){
 
-	// must consider our orientation and adjust the bearing to compensate
-	CRadians adjustedBearing = bearing + GetHeading();
+// 	// must consider our orientation and adjust the bearing to compensate
+// 	CRadians adjustedBearing = bearing + GetHeading();
 
-	// construct a vector from the receiver to the sender (CVector2 will automatically convert this to cartesian coordinates)
-	// range is given in cm from the RAB sensor and must be converted to meters for use with the coordinate system (source: https://opentechschool-brussels.github.io/AI-for-robots-and-swarms/ref_argos.html)
-	CVector2 offset(range/100, adjustedBearing);
+// 	// construct a vector from the receiver to the sender (CVector2 will automatically convert this to cartesian coordinates)
+// 	// range is given in cm from the RAB sensor and must be converted to meters for use with the coordinate system (source: https://opentechschool-brussels.github.io/AI-for-robots-and-swarms/ref_argos.html)
+// 	CVector2 offset(range/100, adjustedBearing);
 
-	// Calculate the origin of the signal (the estimated position of the sender)
-	CVector2 origin = GetPosition() + offset;
+// 	// Calculate the origin of the signal (the estimated position of the sender)
+// 	CVector2 origin = GetPosition() + offset;
 
-	CVector2 realOffset = GetPosition() - LoopFunctions->getTargetLocation(senderID);
-	if (realOffset != offset){
-		// throw runtime_error("Real offset = " + to_string(realOffset.GetX()) + ", " + to_string(realOffset.GetY()) + ", calculated offset = " + to_string(offset.GetX()) + ", " + to_string(offset.GetY()));
-	}
+// 	CVector2 realOffset = GetPosition() - LoopFunctions->getTargetLocation(senderID);
+// 	if (realOffset != offset){
+// 		// throw runtime_error("Real offset = " + to_string(realOffset.GetX()) + ", " + to_string(realOffset.GetY()) + ", calculated offset = " + to_string(offset.GetX()) + ", " + to_string(offset.GetY()));
+// 	}
 
-	// Check if the given coordinate is within the acceptable range of the calculated coordinate (the origin of the signal)
-	if ((givenCoord - origin).Length() < 0.5){
-		// LOG << "true coord detected" << endl;
-		return true;
-	} else {
-		LOG << "Robot " << controllerID << " detected localization error in footbot "<< senderID << endl;
-		LOG << "Given coord: " << givenCoord << ", Calculated coord: " << origin << ", Real coord: "<< LoopFunctions->getTargetLocation(senderID) << endl;
-		// throw runtime_error("Robot " + controllerID + " detected localization error in footbot " + senderID);
-		return false;
-	}
-}
+// 	// Check if the given coordinate is within the acceptable range of the calculated coordinate (the origin of the signal)
+// 	if ((givenCoord - origin).Length() < 0.5){
+// 		// LOG << "true coord detected" << endl;
+// 		return true;
+// 	} else {
+// 		LOG << "Robot " << controllerID << " detected localization error in footbot "<< senderID << endl;
+// 		LOG << "Given coord: " << givenCoord << ", Calculated coord: " << origin << ", Real coord: "<< LoopFunctions->getTargetLocation(senderID) << endl;
+// 		// throw runtime_error("Robot " + controllerID + " detected localization error in footbot " + senderID);
+// 		return false;
+// 	}
+// }
+#pragma endregion
+/***** ARCHIVED *****/
 
 /**
  * Broadcast the responses to all other robots in a single long message.
@@ -1388,14 +1481,14 @@ void CPFA_controller::BroadcastTargetedResponse(){
 	ss << "r,";
 
 	/**
-	 * Format of message: <message_type>,<target_id>,<sender_id>,<vote_boolean>,<target_id>,<sender_id>,<vote_boolean>,...
+	 * Format of message: <message_type>,<target_id>,<sender_id>,<estimate_X>,<estimate_Y>,<target_id>,<sender_id>,<estimate_X>,<estimate_Y>,...
 	*/
 	while(!responseQueue.empty()){
 		if (responseQueue.size() == 1) { // don't add comma at the end
-			ss << responseQueue.front().first << "," << controllerID << "," << responseQueue.front().second;
+			ss << get<0>(responseQueue.front()) << "," << controllerID << "," << get<1>(responseQueue.front()) << "," << get<2>(responseQueue.front());
 			responseQueue.pop();
 		} else {
-			ss << responseQueue.front().first << "," << controllerID << "," << responseQueue.front().second << ",";
+			ss << get<0>(responseQueue.front()) << "," << controllerID << "," << get<1>(responseQueue.front()) << "," << get<2>(responseQueue.front()) << ",";
 			responseQueue.pop();
 		}
 	}
@@ -1403,6 +1496,7 @@ void CPFA_controller::BroadcastTargetedResponse(){
 	Broadcast(ss.str());
 	// if (controllerID == "fb00") LOG << "fb00 responded: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
 }
+
 void CPFA_controller::ProcessVotes(){
 	size_t trueCount = 0;	// coordinate was correct
 	size_t falseCount = 0;	// coordinate was incorrect

@@ -64,9 +64,11 @@ class CPFA_controller : public BaseController {
 
 		/* fault detection */
 
-		void BroadcastLocation();
+		void BroadcastLocation();		// deprecated, using RequestEstimate() instead
+
+		void RequestEstimate();
 		void ProcessMessages(char mode);
-		bool LocalizationCheck(CVector2 givenCoord, Real range, CRadians bearing, string senderID);
+		// CVector2 LocalizationCheck(Real range, CRadians bearing, string senderID);
 		void BroadcastTargetedResponse();
 		void ClearRABData();
 
@@ -157,7 +159,7 @@ class CPFA_controller : public BaseController {
 		bool isUsingPheromone;
 
 		bool faultInjected;
-		vector<bool> voteQueue;				// for storing vote results
+		vector<CVector2> estimationQueue;				// for storing estimated poisions of self from other robots
 		unordered_set<string> voterIDs;		// for storing IDs of those who voted (can't vote twice)
 		void ProcessVotes();
 		bool faultDetected;
