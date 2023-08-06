@@ -70,7 +70,10 @@ CPFA_loop_functions::CPFA_loop_functions() :
 	UseFaultDetection(false),
 	CommunicationDistance(2.0), 
 	VoteCap(3),
-	BroadcastFrequency(5)
+	BroadcastFrequency(5),
+	closeProxRange(15.0),	// in cm
+	farProxRange(30.0),		// in cm
+	obsvWindowLength(10)	// # of control steps to observe for proximity features
 {}
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -456,22 +459,20 @@ void CPFA_loop_functions::FaultDetection() {
 
 	switch (CommunicationMode){
 		case 0:{
-			// broadcast location every 5 seconds
+			// Share BFVs(next mode)
 			if (getSimTimeInSeconds() - lastBroadcastTime >= BroadcastFrequency){
-				// location broadcast
-				LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Broadcasting Location: Begin... ********" << endl;
-				for(it = footbots.begin(); it != footbots.end(); it++) {
-					argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
-					BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
-					CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-					c2.BroadcastLocation();
-					c2.broadcastProcessed = false;
-					c2.responseProcessed = false;
-				}
 				lastBroadcastTime = getSimTimeInSeconds();
 				// broadcastDone = true;
 				CommunicationMode = 1;
-				LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Broadcasting Location: Done. ********" << endl;
+			}
+			// ping every control loop unless it is time to share BFVs
+			for(it = footbots.begin(); it != footbots.end(); it++) {
+				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+				c2.Ping();
+				// c2.broadcastProcessed = false;
+				// c2.responseProcessed = false;
 			}
 			break;
 		}
@@ -483,7 +484,7 @@ void CPFA_loop_functions::FaultDetection() {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-				c2.ProcessMessages('b');
+				c2.GetRABData('b');
 				if (!c2.broadcastProcessed){
 					CommunicationMode = 1;
 				}
@@ -492,7 +493,6 @@ void CPFA_loop_functions::FaultDetection() {
 			else if (CommunicationMode == 1) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Ongoing..." << endl;
 			break;
 		}
-		case 2:{
 			// response broadcast
 			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Broadcast: Begin..." << endl;
 			for(it = footbots.begin(); it != footbots.end(); it++) {
@@ -513,7 +513,7 @@ void CPFA_loop_functions::FaultDetection() {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-				c2.ProcessMessages('r');
+				c2.GetRABData('r');
 				if (!c2.responseProcessed){
 					CommunicationMode = 3;
 				}

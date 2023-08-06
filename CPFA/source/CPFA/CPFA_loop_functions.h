@@ -125,6 +125,10 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		size_t AltClusterWidth;
 		size_t AltClusterLength;
 
+		Real closeProxRange;
+		Real farProxRange;
+		size_t obsvWindowLength;
+
 		size_t numRealTrails;
 		size_t numFakeTrails;
 		size_t numFalsePositives;

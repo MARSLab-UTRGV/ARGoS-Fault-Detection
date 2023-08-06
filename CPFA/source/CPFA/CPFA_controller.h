@@ -64,11 +64,8 @@ class CPFA_controller : public BaseController {
 
 		/* fault detection */
 
-		void BroadcastLocation();		// deprecated, using RequestEstimate() instead
-
-		void RequestEstimate();
-		void ProcessMessages(char mode);
-		// CVector2 LocalizationCheck(Real range, CRadians bearing, string senderID);
+		void Ping();
+		void GetRABData(char mode);
 		void BroadcastTargetedResponse();
 		void ClearRABData();
 
@@ -162,6 +159,10 @@ class CPFA_controller : public BaseController {
 		vector<CVector2> estimationQueue;				// for storing estimated poisions of self from other robots
 		unordered_set<string> voterIDs;		// for storing IDs of those who voted (can't vote twice)
 		void ProcessVotes();
+		void UpdateProximityQueue(vector<Real> sRangeList);
+		queue<pair<Real,Real>> proximityQueue;
+		vector<uint8_t> BuildBFV();
+		vector<uint8_t> bfv;	// Binary Feature Vector (one bit per feature)
 		bool faultDetected;
 		bool faultLogged;
 		queue<pair<string, bool>> responseQueue;

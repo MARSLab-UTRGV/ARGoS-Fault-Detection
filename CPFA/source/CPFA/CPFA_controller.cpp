@@ -1261,25 +1261,9 @@ void CPFA_controller::UpdateTargetRayList() {
 	}
 }
 
-/**
- * Broadcast the location of the robot to all other robots.
- * Format of message: <message_type>,<id>,<x_value>,<y_value>
- * e.g. "b,fb01,1,2"
-*/
-void CPFA_controller::BroadcastLocation(){
+void CPFA_controller::Ping(){
 	string selfID = controllerID;
-
-	ostringstream ossPos;
-	ossPos << fixed << setprecision(3) << GetPosition().GetX() << "," << GetPosition().GetY();
-
-	string selfPos = ossPos.str();
-
-	Broadcast("b," + selfID + "," + selfPos);
-}
-
-void CPFA_controller::RequestEstimate(){
-	string selfID = controllerID;
-	Broadcast("q," + selfID);
+	Broadcast("p," + selfID);
 }
 
 /***** ARCHIVED *****/
@@ -1355,9 +1339,15 @@ void CPFA_controller::RequestEstimate(){
 #pragma endregion
 /***** ARCHIVED *****/
 
-void CPFA_controller::ProcessMessages(char mode){
+
+/* TODO: Separate the conditionals in here into separate functions (e.g., 'p' -> GetProximityData(), 'r' -> GetFeatureVectorData())*/
+/* TODO: Make sure UpdateProximityQueues() is called as needed even when there is no RAB msgs (no bots in range) */
+void CPFA_controller::GetRABData(char mode){
 	vector<tuple<string, Real, CRadians>> msgQueue = Receive();
 	// LOG << LoopFunctions->getSimTimeInSeconds() << endl;
+
+	// to store the range values gathered with the RAB sensor
+	vector<Real> proximityData;
 
 	for(auto it = msgQueue.begin(); it != msgQueue.end(); ++it) {
 
@@ -1368,13 +1358,13 @@ void CPFA_controller::ProcessMessages(char mode){
 		getline(ss, msgType, ',');
 
 		// if (controllerID == "fb00") LOG << "fb00 received: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
-		if (mode == 'q'){
+		if (mode == 'p'){
 			if (msgType == "r"){ 
-				// LOG << "WARNING: received response type message during broadcast mode in ProcessMessages()" << endl;
+				// LOG << "WARNING: received response type message during ping mode in ProcessMessages()" << endl;
 
-			} else if (msgType == "q"){
+			} else if (msgType == "p"){
 
-				string senderID, x_str, y_str;
+				string senderID;
 				getline(ss, senderID, ',');
 
 				Real signalRange = get<1>(*it);						// range of signal provided by RAB Sensor
@@ -1382,15 +1372,13 @@ void CPFA_controller::ProcessMessages(char mode){
 				// if (controllerID == "fb00") LOG << "fb00 received broadast: " << ss.str() << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
 				
 				/**
-				 * The offset between the signal origin and the robot.
 				 * - The signal range from the RAB sensor is given in cm, so we convert to meters.
 				 * - The bearing from the RAB sensor is given relative to the robot, so we must consider the 
 				 * 		robot's heading to convert it into a global representation.
 				*/
-				CVector2 offset(signalRange/100, signalBearing+GetHeading());
-				CVector2 estimate = GetPosition() + offset;
-				responseQueue.push(make_tuple(senderID, estimate.GetX(), estimate.GetY()));
-				broadcastProcessed = true;
+				
+				/* Push data into a list and this list into a queue after all data is read */
+				proximityData.push_back(signalRange);
 
 			}else if (ss.eof()){
 				if (controllerID == "fb00") LOG << "fb00 received EOF" << setw(setwidth) << right << "Time: " << LoopFunctions->getSimTimeInSeconds() << endl;
@@ -1398,6 +1386,12 @@ void CPFA_controller::ProcessMessages(char mode){
 			} else {
 				LOG << "runtime_error: " << msgType << endl;
 				// throw runtime_error("Runtime Error: " + msgType + "is not a valid message type...\n");
+			}
+
+			/* Check if this iteration is the last, if it is, update proxmity lists/queues, then empty proximityData */
+			if (it == msgQueue.end() - 1 && !proximityData.empty()){
+				UpdateProximityQueue(proximityData);
+				proximityData.clear();
 			}
 
 		} else if (mode == 'r'){
@@ -1434,6 +1428,34 @@ void CPFA_controller::ProcessMessages(char mode){
 			throw runtime_error("Unknown mode for ProcessMessages() encountered...");
 		}
 	}
+}
+
+void CPFA_controller::UpdateProximityQueue(vector<Real> proxData){
+	
+	size_t closeProxCount = 0;
+	size_t farProxCount = 0;
+	
+	/* Loop through the proximity data (proxData) and count # of bots in close/far proximity */
+	for (auto it = proxData.begin(); it != proxData.end(); ++it){
+		if (*it < LoopFunctions->closeProxRange){
+			closeProxCount++;
+		} else if (*it > LoopFunctions->closeProxRange && *it < LoopFunctions->farProxRange){
+			farProxCount++;
+		}else{
+			/* TODO: Make sure that the farProxRange maximum is set to the max range of the RAB sensor */
+			LOG << "ERROR: invalid range value in UpdateProximityLists()" << endl;
+		}
+	}
+
+	/* Update the proximity queue */
+	proximityQueue.push(make_pair(closeProxCount, farProxCount));
+	if (proximityQueue.size() > LoopFunctions->obsvWindowLength){
+		proximityQueue.pop();
+	}
+}
+
+vector<uint8_t> CPFA_controller::BuildBFV(){
+
 }
 
 /***** ARCHIVED *****/
