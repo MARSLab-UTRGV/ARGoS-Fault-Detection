@@ -128,6 +128,7 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		Real closeProxRange;
 		Real farProxRange;
 		size_t obsvWindowLength;
+		Real RABRange;
 
 		size_t numRealTrails;
 		size_t numFakeTrails;

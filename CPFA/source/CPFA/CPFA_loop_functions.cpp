@@ -71,9 +71,10 @@ CPFA_loop_functions::CPFA_loop_functions() :
 	CommunicationDistance(2.0), 
 	VoteCap(3),
 	BroadcastFrequency(5),
-	closeProxRange(15.0),	// in cm
-	farProxRange(30.0),		// in cm
-	obsvWindowLength(10)	// # of control steps to observe for proximity features
+	obsvWindowLength(10),						// # of control steps to observe for proximity features
+	RABRange(3.0),								// in m (default is 3 but will update according to the configuration file)
+	closeProxRange((RABRange*100)/2),			// in cm, half of the max range of the RAB sensor/actuator, will be updated in initialization (incase RABRange is not set to defualt)
+	farProxRange(RABRange*100)					// in cm, max range of the RAB sensor/actuator, will be updated in initialization (incase RABRange is not set to defualt)
 {}
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -134,6 +135,7 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings_node, "UseFaultDetection",				UseFaultDetection);
 	argos::GetNodeAttribute(settings_node, "CommunicationDistance",			CommunicationDistance);
 	argos::GetNodeAttribute(settings_node, "VoteCap",						VoteCap);
+	argos::GetNodeAttribute(settings_node, "RABRange",						RABRange);
 
 	FoodRadiusSquared = FoodRadius*FoodRadius;
 
@@ -235,6 +237,10 @@ void CPFA_loop_functions::Reset() {
         MoveEntity(footBot.GetEmbodiedEntity(), c2.GetStartPosition(), argos::CQuaternion(), false);
     	c2.Reset();
     }
+
+	// update the close and far proximity range parameters for the proximity features (incase RABRange is not set to default)
+	closeProxRange = (RABRange * 100)/2;	// in cm
+	farProxRange = RABRange * 100			// in cm
 }
 
 void CPFA_loop_functions::PreStep() {

@@ -66,6 +66,8 @@ class CPFA_controller : public BaseController {
 
 		void Ping();
 		void GetRABData(char mode);
+		void GetFVData(char mode);
+		void ShareBFV();
 		void BroadcastTargetedResponse();
 		void ClearRABData();
 

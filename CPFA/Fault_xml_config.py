@@ -456,6 +456,7 @@ class C_XML_CONFIG:
         lf_settings.setAttribute('VoteCap', str(self.VCAP))
         lf_settings.setAttribute('UseFaultDetection', str(self.USE_FD))
         lf_settings.setAttribute("CommunicationDistance", str(self.RAB_RANGE))
+        lf_settings.setAttribute("RABRange", str(self.RAB_RANGE))
         loops.appendChild(lf_settings)
         #       </settings>
         #   </loop_functions>
