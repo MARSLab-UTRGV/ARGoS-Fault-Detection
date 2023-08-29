@@ -2,7 +2,7 @@
 <argos-configuration>
 	<framework>
 		<system threads="0"/>
-		<experiment length="6000" ticks_per_second="16" random_seed="688074"/>
+		<experiment length="6000" ticks_per_second="16" random_seed="0"/>
 	</framework>
 	<controllers>
 		<CPFA_controller id="CPFA" library="build/source/CPFA/libCPFA_controller">
@@ -24,7 +24,7 @@
 	</controllers>
 	<loop_functions label="CPFA_loop_functions" library="build/source/CPFA/libCPFA_loop_functions">
 		<CPFA PrintFinalScore="1" ProbabilityOfReturningToNest="0.00297618325581" ProbabilityOfSwitchingToSearching="0.3637176255" RateOfInformedSearchDecay="0.253110502082" RateOfLayingPheromone="8.98846470854" RateOfPheromoneDecay="0.063119269938" RateOfSiteFidelity="1.42036207003" UninformedSearchVariation="2.67338576954"/>
-		<settings DrawIDs="1" DrawTargetRays="0" DrawTrails="1" DrawDensityRate="4" MaxSimCounter="1" MaxSimTimeInSeconds="900" OutputData="0" NestElevation="0.0" NestPosition="(0, 0)" NestRadius="0.25" VariableFoodPlacement="0" FoodRadius="0.05" UseFakeFoodOnly="false" FoodDistribution="1" UseAltDistribution="false" AltClusterWidth="36" AltClusterLength="4" NumRealFood="192" PowerlawFoodUnitCount="192" NumberOfClusters="3" ClusterWidthX="6" ClusterWidthY="6" UseFakeFoodDoS="false" FakeFoodDistribution="1" NumFakeFood="64" PowerlawFakeFoodUnitCount="64" NumFakeClusters="1" FakeClusterWidthX="8" FakeClusterWidthY="8" FilenameHeader="results/CPFA_cl_r16_rfc108_FT-cbias_ofd1.0_fct2_ftm5_10by10_time900_iter1" Densify="false" FaultNumber="1" OffsetDistance="1.0" NumBotsToInject="2" InjectionTime="5" FaultHighlightRadius="0.25" VoteCap="3" UseFaultDetection="true" CommunicationDistance="3.0"/>
+		<settings DrawIDs="1" DrawTargetRays="0" DrawTrails="1" DrawDensityRate="4" MaxSimCounter="1" MaxSimTimeInSeconds="900" OutputData="0" NestElevation="0.0" NestPosition="(0, 0)" NestRadius="0.25" VariableFoodPlacement="0" FoodRadius="0.05" UseFakeFoodOnly="false" FoodDistribution="1" UseAltDistribution="false" AltClusterWidth="36" AltClusterLength="4" NumRealFood="192" PowerlawFoodUnitCount="192" NumberOfClusters="3" ClusterWidthX="6" ClusterWidthY="6" UseFakeFoodDoS="false" FakeFoodDistribution="1" NumFakeFood="64" PowerlawFakeFoodUnitCount="64" NumFakeClusters="1" FakeClusterWidthX="8" FakeClusterWidthY="8" FilenameHeader="results/CPFA_cl_r16_rfc108_FT-cbias_ofd1.0_fct2_ftm5_10by10_time900_iter1" Densify="false" FaultNumber="1" OffsetDistance="1.0" NumBotsToInject="2" InjectionTime="5" FaultHighlightRadius="0.25" VoteCap="3" UseFaultDetection="true" CommunicationDistance="3.0" RABRange="3.0"/>
 	</loop_functions>
 	<arena size="10,10,1" center="0,0,0.5">
 		<floor id="floor" pixels_per_meter="10" source="loop_functions"/>

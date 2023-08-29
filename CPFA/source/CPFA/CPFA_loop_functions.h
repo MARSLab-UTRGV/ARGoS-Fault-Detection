@@ -78,8 +78,10 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 
 		void Terminate();
 
+		/********************************************************************************/
+		/*								Fault Detection									*/
+		/********************************************************************************/
 		void FaultInjection();
-
 		void FaultDetection();
 
 	protected:
@@ -184,6 +186,13 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		bool terminate;
 		bool densify;
 
+		CVector2 getTargetLocation(string targetID);
+
+
+		/********************************************************************************/
+		/*								Fault Detection									*/
+		/********************************************************************************/
+
 		/* fault injection */
 
 		bool faultInjected;
@@ -202,15 +211,13 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		argos::Real BroadcastFrequency;	// in seconds
 		argos::Real lastBroadcastTime = 0;
 
-		bool broadcastDone = false;
+		bool fdExeFreqReached = false;			// true when it is time to execute the fault detection algorithm (depends on the execution frequency)
+		bool ModeSwitchReady = false;			// true when it is time to switch to the next communication mode 
 		bool processBroadcastDone = false;
 		bool respondDone = false;
 		bool processRespondDone = false;
 
 		size_t CommunicationMode = 0;
-
-		CVector2 getTargetLocation(string targetID);
-
 
 	private:
 

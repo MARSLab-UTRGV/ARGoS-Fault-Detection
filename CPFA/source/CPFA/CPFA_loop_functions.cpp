@@ -79,6 +79,8 @@ CPFA_loop_functions::CPFA_loop_functions() :
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
  
+	argos::LOG << "In init" << endl;
+
 	argos::CDegrees USV_InDegrees;
 	argos::TConfigurationNode CPFA_node = argos::GetNode(node, "CPFA");
 
@@ -201,8 +203,11 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
   
 	ForageList.clear(); 
 	last_time_in_minutes=0;
-}
 
+	// update the close and far proximity range parameters for the proximity features (incase RABRange is not set to default)
+	closeProxRange = (RABRange * 100)/2;	// in cm
+	farProxRange = RABRange * 100;			// in cm
+}
 
 void CPFA_loop_functions::Reset() {
 	if(VariableFoodPlacement == 0) {
@@ -238,9 +243,6 @@ void CPFA_loop_functions::Reset() {
     	c2.Reset();
     }
 
-	// update the close and far proximity range parameters for the proximity features (incase RABRange is not set to default)
-	closeProxRange = (RABRange * 100)/2;	// in cm
-	farProxRange = RABRange * 100			// in cm
 }
 
 void CPFA_loop_functions::PreStep() {
@@ -280,6 +282,7 @@ void CPFA_loop_functions::PreStep() {
 void CPFA_loop_functions::PostStep() {
 	// do fault detection post step
 	FaultDetection();
+	LOG << "entering post step" << endl;
 }
 
 void CPFA_loop_functions::Terminate(){
@@ -464,70 +467,135 @@ void CPFA_loop_functions::FaultDetection() {
 	argos::CSpace::TMapPerType::iterator it;
 
 	switch (CommunicationMode){
+
+		// ping (send/receive RAB data)
 		case 0:{
-			// Share BFVs(next mode)
-			if (getSimTimeInSeconds() - lastBroadcastTime >= BroadcastFrequency){
-				lastBroadcastTime = getSimTimeInSeconds();
-				// broadcastDone = true;
-				CommunicationMode = 1;
-			}
+
+			/**
+			 * Note: 
+			 * 		Ideally, we would want to ping every control loop to consistently maintain the sliding window of proximity features.
+			 * 		However, we can't ping and receive every control loop because the RAB actuator can NOT be occupied during other communication modes.
+			*/
+
+			/* check the execution frequency for the fault detection algorihtm to see if we can move forward */
+			ModeSwitchReady = (getSimTimeInSeconds() - lastBroadcastTime >= BroadcastFrequency) ? true : false;
+			
 			// ping every control loop unless it is time to share BFVs
 			for(it = footbots.begin(); it != footbots.end(); it++) {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
 				c2.Ping();
-				// c2.broadcastProcessed = false;
-				// c2.responseProcessed = false;
+				c2.GetRABData();
+				
+				/* if not all robots have their proximity queue full then we shouldn't move forward */
+				ModeSwitchReady = (!c2.proximityQueueFull) ? false : ModeSwitchReady;
+				if (!ModeSwitchReady) LOG << "Test Test Test" << endl;
+			}
+			if (ModeSwitchReady){
+				lastBroadcastTime = getSimTimeInSeconds();
+				CommunicationMode = 1;
+				ModeSwitchReady = false;	// reset this for next mode
+				LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Ping: Done." << endl;
 			}
 			break;
 		}
+		
+		// create BFVs and share with swarm
 		case 1:{
-			CommunicationMode = 2;
-			// process broadcasted messages
-			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Begin..." << endl;
+			ModeSwitchReady = true;
+			
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: BFV Creation & Broadcast: Begin..." << endl;
 			for(it = footbots.begin(); it != footbots.end(); it++) {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-				c2.GetRABData('b');
-				if (!c2.broadcastProcessed){
-					CommunicationMode = 1;
-				}
+
+				/* create BFV and share it with swarm*/
+				c2.ShareBFV();
+	
+				ModeSwitchReady = (!c2.shareBFVDone) ? false : ModeSwitchReady;
 			}
-			if (CommunicationMode == 2) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Complete" << endl;
-			else if (CommunicationMode == 1) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Processing Messages: Ongoing..." << endl;
+			CommunicationMode = (ModeSwitchReady) ? 2 : 1;
+			if (CommunicationMode == 2) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: BFV Creation & Broadcast: Complete" << endl;
+			else if (CommunicationMode == 1) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: BFV Creation & Broadcast: Ongoing..." << endl;
 			break;
 		}
-			// response broadcast
-			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Broadcast: Begin..." << endl;
+
+		// receive BFVs and begin CRM
+		case 2:{
+
+			ModeSwitchReady = true;
+
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: CRM: Begin..." << endl;
 			for(it = footbots.begin(); it != footbots.end(); it++) {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-				c2.BroadcastTargetedResponse();
+
+				/* Get the FV data that was broadcast in the previous mode and setup the CRM */
+				c2.GetFVData();
+
+				/* Run the CRM */
+				c2.RunCRMInstance();
+
+				/* Make sure the CRM executed */
+				ModeSwitchReady = (!c2.CRMDone) ? false : ModeSwitchReady;
+
 			}
-			CommunicationMode = 3;
-			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Broadcast: Done." << endl;
+			CommunicationMode = (ModeSwitchReady) ? 3 : 2;
+			if (CommunicationMode = 3) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: CRM: Done." << endl;
 			break;
 		}
+
+		/* We need another case here to handle diffusion if we decide to implement it */
+
+		// Share decisions with swarm
 		case 3:{
-			CommunicationMode = 0;
-			// process responses
-			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Begin..." << endl;
+
+			ModeSwitchReady = true;
+			
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Sharing CRM Results: Begin..." << endl;
 			for(it = footbots.begin(); it != footbots.end(); it++) {
 				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
 				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
-				c2.GetRABData('r');
-				if (!c2.responseProcessed){
-					CommunicationMode = 3;
-				}
+
+				/* Share the CRM results with the swarm */
+				c2.ShareDecision();
+
+				/* Bool Check for share decision */
+				ModeSwitchReady = (!c2.shareDecisionDone) ? false : ModeSwitchReady;
 			}
-			if (CommunicationMode == 0) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Complete" << endl;
-			else if (CommunicationMode == 3) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Response Processing: Ongoing..." << endl;
+			CommunicationMode = (ModeSwitchReady) ? 4 : 3;
+			if (CommunicationMode == 0) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Sharing CRM Results: Complete" << endl;
+			else if (CommunicationMode == 3) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Sharing CRM Results: Ongoing..." << endl;
 			break;
 		}
+
+		// get shared CRM results and execute consensus algorithm (simple majority)
+		case 4: {
+			
+			ModeSwitchReady = true;
+
+			LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Consensus Algorithm: Begin..." << endl;
+			for(it = footbots.begin(); it != footbots.end(); it++) {
+				argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+				BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
+				CPFA_controller& c2 = dynamic_cast<CPFA_controller&>(c);
+
+				/* Run the consensus algorithm and check for faults based on self FV */
+				c2.ComputeConsensus();
+
+				/* Bool Check for consensus algorithm */
+				ModeSwitchReady = (!c2.consensusDone) ? false : ModeSwitchReady;
+			}
+			CommunicationMode = (ModeSwitchReady) ? 0 : 4;
+			if (CommunicationMode == 5) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Consensus Algorithm: Done." << endl;
+			else if (CommunicationMode == 4) LOG << "Time:" << fixed << setprecision(4) << getSimTimeInSeconds() << "\tAll Robots: Consensus Algorithm: Ongoing..." << endl;
+			break;
+		}
+
 		default:{
 			LOG << "Fault Detection: Unknown Communication Mode: " << CommunicationMode << endl;
 		}

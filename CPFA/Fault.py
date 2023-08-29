@@ -2245,11 +2245,11 @@ def FaultTest1():
     XML.setDistribution(1)
     XML.DRAW_TRAILS = 1
 
-    XML.RANDOM_SEED = 688074
+    # XML.RANDOM_SEED = 688074
 
-    XML.F_NUM = 1
+    XML.F_NUM = 0
     XML.F_OFD = 1.0
-    XML.F_COUNT = 2 # Number of Faults
+    XML.F_COUNT = 0 # Number of Faults
     XML.F_TIME = 5 # seconds
     XML.RAB_DATA_SIZE = 192
 
